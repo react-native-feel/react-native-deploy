@@ -1,0 +1,45 @@
+{
+  "cli": {
+    "version": "1.0.0"
+  },
+  "aws": {
+    "region": "us-east-1",
+    "instanceType": "mac2.metal",
+    "keyPairName": "rn-deploy-key",
+    "securityGroupName": "rn-deploy-sg",
+    "customAmiId": null,
+    "nodeVersion": "20",
+    "xcodeVersion": "16"
+  },
+  "asc": {
+    "keyId": "",
+    "issuerId": "",
+    "privateKeyPath": "~/.appstoreconnect/AuthKey.p8"
+  },
+  "repo": {
+    "url": "",
+    "branch": "main"
+  },
+  "build": {
+    "production": {
+      "buildType": "expo",
+      "scheme": "MyApp",
+      "buildConfiguration": "Release",
+      "env": {}
+    },
+    "preview": {
+      "extends": "production",
+      "distribution": "ad-hoc"
+    },
+    "development": {
+      "extends": "production",
+      "buildConfiguration": "Debug"
+    }
+  },
+  "submit": {
+    "production": {
+      "testFlightGroups": ["Internal Testers"],
+      "whatToTest": ""
+    }
+  }
+}
