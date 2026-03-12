@@ -1,6 +1,6 @@
 node_modules/
 .rn-deploy-state.json
-build/
+/build/
 *.p8
 .tmp-test/
 .tmp-test-state/
