@@ -1,0 +1,224 @@
+import { loadConfig, mergeWithFlags, validateLoadedConfig } from '../config/loader.js';
+import { resolveProfile } from '../config/profiles.js';
+import { loadState } from '../infra/state.js';
+import { infraUp, infraDown } from './infra.js';
+import { createSshConnection, sshExec } from '../remote/ssh.js';
+import { provisionInstance, cloneRepo } from '../remote/provision.js';
+import { setupSigning, fetchSigningAssets, generateExportOptionsPlist } from '../remote/signing.js';
+import { getExpoBuildSteps } from '../build/expo.js';
+import { getClassicBuildSteps } from '../build/classic.js';
+import { findAndDownloadIpa } from '../build/artifacts.js';
+import { createCustomAmi } from '../infra/ami.js';
+import { getPrivateKeyPath } from '../infra/key-pair.js';
+import { logger } from '../utils/logger.js';
+import { confirm, input, select } from '../utils/prompts.js';
+import { verifyPrerequisites } from '../utils/prerequisites.js';
+import { submitToTestFlight } from './submit.js';
+
+const TMUX_SESSION = 'rn-deploy-build';
+const TMUX_LOG = '/tmp/rn-deploy-build.log';
+
+export async function buildCommand(options = {}) {
+  await verifyPrerequisites();
+
+  // Handle --resume: reconnect to existing tmux build session
+  if (options.resume) {
+    return resumeBuild(options);
+  }
+
+  // Load and merge config
+  const rawConfig = loadConfig();
+  const config = mergeWithFlags(rawConfig, options);
+  validateLoadedConfig(config);
+
+  // Resolve build profile
+  const profileName = options.profile || 'production';
+  let profile = resolveProfile(config.build, profileName);
+
+  // Apply flag overrides
+  if (config._flagOverrides) {
+    profile = { ...profile, ...config._flagOverrides };
+  }
+
+  // Interactive prompts for missing values
+  if (!options.nonInteractive) {
+    if (!config.repo.url) {
+      config.repo.url = await input('Git repository URL:');
+    }
+    if (!profile.scheme) {
+      profile.scheme = await input('Xcode scheme name:');
+    }
+    if (!profile.buildType) {
+      profile.buildType = await select('Build type:', ['expo', 'classic']);
+    }
+  }
+
+  const { region, keyPairName } = config.aws;
+  const totalTimeoutMs = (options.timeout || 60) * 60 * 1000;
+  const buildStartTime = Date.now();
+
+  // Step 1: Ensure infrastructure
+  logger.step(1, 6, 'Provisioning infrastructure');
+  let state = loadState();
+  if (!state || !(await isInstanceReachable(state))) {
+    state = await infraUp(options);
+    if (!state) return;
+  } else {
+    logger.info(`Reusing existing instance: ${state.instanceId} at ${state.publicIp}`);
+  }
+
+  // Step 2: SSH connect
+  logger.step(2, 6, 'Connecting via SSH');
+  const keyPath = state.keyPath || getPrivateKeyPath(keyPairName);
+  const ssh = await createSshConnection(state.publicIp, keyPath);
+
+  try {
+    // Step 3: Provision instance (skip if custom AMI)
+    if (!config.aws.customAmiId) {
+      logger.step(3, 6, 'Setting up build environment');
+      await provisionInstance(ssh, {
+        nodeVersion: config.aws.nodeVersion,
+        xcodeVersion: config.aws.xcodeVersion,
+      });
+    } else {
+      logger.step(3, 6, 'Using custom AMI — skipping provisioning');
+    }
+
+    // Setup signing and extract real values
+    await setupSigning(ssh, config.asc);
+    const signingInfo = await fetchSigningAssets(ssh);
+
+    // Clone repo
+    const workDir = await cloneRepo(ssh, config.repo.url, config.repo.branch);
+
+    // Generate ExportOptions.plist on remote using real signing values
+    const distribution = profile.distribution || 'app-store';
+    const method = distribution === 'ad-hoc' ? 'ad-hoc' : 'app-store';
+    const plistContent = generateExportOptionsPlist({
+      method,
+      teamId: signingInfo.teamId,
+      bundleId: signingInfo.bundleId,
+      profileName: signingInfo.profileName,
+    });
+    await sshExec(ssh, `cat > ${workDir}/ExportOptions.plist << 'PLIST_EOF'\n${plistContent}\nPLIST_EOF`);
+
+    // Step 4: Build inside tmux session for resilience
+    logger.step(4, 6, 'Building app');
+    const buildSteps = profile.buildType === 'expo'
+      ? getExpoBuildSteps({ scheme: profile.scheme, buildConfiguration: profile.buildConfiguration, workDir })
+      : getClassicBuildSteps({ scheme: profile.scheme, buildConfiguration: profile.buildConfiguration, workDir });
+
+    // Build env vars as export string for shell persistence
+    const envExports = Object.entries(profile.env || {})
+      .map(([k, v]) => `export ${k}="${v}"`)
+      .join(' && ');
+
+    // Create a build script with all steps, run inside tmux
+    const buildScript = buildSteps.map(s => `echo "=== ${s.name} ===" && ${s.cmd}`).join(' && ');
+    const fullScript = envExports ? `${envExports} && ${buildScript}` : buildScript;
+
+    await sshExec(ssh, `tmux kill-session -t ${TMUX_SESSION} 2>/dev/null || true`);
+    await sshExec(ssh, `tmux new-session -d -s ${TMUX_SESSION} 'bash -c "${fullScript.replace(/"/g, '\\"')}" 2>&1 | tee ${TMUX_LOG}'`);
+
+    // Tail the log and wait for tmux session to finish
+    logger.info('Build started in tmux session. Streaming logs...');
+    const tailPromise = sshExec(ssh, `tail -f ${TMUX_LOG} &
+      while tmux has-session -t ${TMUX_SESSION} 2>/dev/null; do sleep 5; done
+      kill %1 2>/dev/null
+      # Check if build succeeded (last command exit code)
+      tail -1 ${TMUX_LOG}`, { stream: true });
+
+    const timeoutPromise = new Promise((_, reject) => {
+      const remaining = totalTimeoutMs - (Date.now() - buildStartTime);
+      setTimeout(() => reject(new Error(`Build timed out after ${options.timeout || 60} minutes`)), remaining);
+    });
+
+    await Promise.race([tailPromise, timeoutPromise]);
+
+    // Step 5: Retrieve artifact
+    logger.step(5, 6, 'Retrieving build artifact');
+    const exportPath = `${workDir}/build/export`;
+    const { localPath, remotePath } = await findAndDownloadIpa(
+      ssh, exportPath, process.cwd(), profile.scheme
+    );
+
+    // Step 6: Submit (if auto-submit)
+    if (options.autoSubmit) {
+      logger.step(6, 6, 'Submitting to TestFlight');
+      await submitToTestFlight(ssh, {
+        ipaPath: remotePath,
+        config,
+        profileName,
+        whatToTest: options.message, // --message flag used as "What to Test"
+      });
+    } else {
+      logger.step(6, 6, 'Build complete');
+      logger.success(`IPA saved to: ${localPath}`);
+    }
+
+    // Offer AMI caching after first build with no custom AMI
+    if (!config.aws.customAmiId && !options.nonInteractive) {
+      const saveAmi = await confirm('Save this instance as a custom AMI for faster future builds?', true);
+      if (saveAmi) {
+        const amiId = await createCustomAmi(state.instanceId, region);
+        logger.info(`Add this to your deploy.config.json aws section: "customAmiId": "${amiId}"`);
+      }
+    }
+  } finally {
+    ssh.dispose();
+  }
+
+  // Teardown unless --no-teardown
+  if (!options.noTeardown) {
+    await infraDown(options);
+  } else {
+    logger.info('Instance kept alive (--no-teardown). Run "rn-deploy infra down" when done.');
+  }
+}
+
+async function resumeBuild(options) {
+  const state = loadState();
+  if (!state) {
+    throw new Error('No active instance found. Cannot resume.');
+  }
+
+  const config = loadConfig();
+  const keyPath = state.keyPath || getPrivateKeyPath(config.aws.keyPairName);
+  const ssh = await createSshConnection(state.publicIp, keyPath);
+
+  try {
+    // Check if tmux session exists
+    const check = await sshExec(ssh, `tmux has-session -t ${TMUX_SESSION} 2>/dev/null && echo "running" || echo "done"`);
+    if (check.stdout.trim() === 'running') {
+      logger.info('Reconnecting to active build session...');
+      await sshExec(ssh, `tail -f ${TMUX_LOG} &
+        while tmux has-session -t ${TMUX_SESSION} 2>/dev/null; do sleep 5; done
+        kill %1 2>/dev/null`, { stream: true });
+    } else {
+      logger.info('Build session completed. Checking for artifacts...');
+      await sshExec(ssh, `cat ${TMUX_LOG}`, { stream: true });
+    }
+  } finally {
+    ssh.dispose();
+  }
+}
+
+async function isInstanceReachable(state) {
+  if (!state || !state.keyPath) return false;
+  try {
+    // Note: StrictHostKeyChecking=accept-new is acceptable here because EC2 Mac instances
+    // are ephemeral — host keys change on every new instance. We verify identity
+    // via AWS instance ID + the SSH key pair we created.
+    const { execFileSync } = await import('node:child_process');
+    execFileSync('ssh', [
+      '-o', 'ConnectTimeout=5',
+      '-o', 'StrictHostKeyChecking=accept-new',
+      '-i', state.keyPath,
+      `ec2-user@${state.publicIp}`,
+      'echo ok',
+    ], { stdio: 'pipe', timeout: 10000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
