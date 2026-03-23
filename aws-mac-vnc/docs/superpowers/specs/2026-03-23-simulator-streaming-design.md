@@ -113,7 +113,7 @@ Located in `frontend/` directory.
 **Stack:**
 - Vite + React + TypeScript
 - Tailwind CSS
-- noVNC — vendored from `novnc/noVNC` GitHub repo (the `RFB` class is imported directly; there is no reliable first-party npm package)
+- `@novnc/novnc` (official npm package, v1.6.0+) — the `RFB` class is imported from `@novnc/novnc/lib/rfb`
 
 **Pages/Components:**
 - `App.tsx` — Main layout, connection state management
