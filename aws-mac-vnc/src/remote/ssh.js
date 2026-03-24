@@ -1,25 +1,32 @@
 import { NodeSSH } from 'node-ssh';
 import { logger } from '../utils/logger.js';
 
-export function buildSshConfig(host, privateKeyPath) {
-  return {
+export function buildSshConfig(host, privateKeyPath, { username = 'admin', password } = {}) {
+  const config = {
     host,
-    username: 'ec2-user',
-    privateKeyPath,
+    username,
     readyTimeout: 30000,
     keepaliveInterval: 10000,
   };
+
+  if (privateKeyPath) {
+    config.privateKeyPath = privateKeyPath;
+  } else if (password) {
+    config.password = password;
+  }
+
+  return config;
 }
 
-export async function connectWithRetry(host, privateKeyPath, retries = 5) {
-  const config = buildSshConfig(host, privateKeyPath);
+export async function connectWithRetry(host, privateKeyPath, { username, password, retries = 5 } = {}) {
+  const config = buildSshConfig(host, privateKeyPath, { username, password });
   const ssh = new NodeSSH();
 
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      logger.debug(`SSH attempt ${attempt}/${retries} to ${host}`);
+      logger.debug(`SSH attempt ${attempt}/${retries} to ${config.username}@${host}`);
       await ssh.connect(config);
-      logger.success(`SSH connected to ${host}`);
+      logger.success(`SSH connected to ${config.username}@${host}`);
       return ssh;
     } catch (err) {
       if (attempt === retries) throw err;
