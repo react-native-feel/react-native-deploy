@@ -21,9 +21,12 @@ export function createCli() {
     .option('--user <name>', 'SSH username', 'admin')
     .option('--key <path>', 'Path to SSH private key')
     .option('--password <pass>', 'SSH password (if not using key)')
+    .option('--ssh-port <number>', 'SSH port', '22')
     .option('--device <name>', 'Simulator device name', 'iPhone 16 Pro')
     .option('--runtime <version>', 'iOS runtime version (default: latest available)')
     .option('--port <number>', 'websockify port', '6080')
+    .option('--vnc-password <pass>', 'Existing VNC password — skips sudo-based VNC setup (for managed plans like MacinCloud)')
+    .option('--tunnel', 'Frontend connects via SSH port-forward instead of direct — use when inbound ports are not exposed')
     .action(async (options) => {
       const { streamCommand } = await import('./commands/stream.js');
       await streamCommand(options);

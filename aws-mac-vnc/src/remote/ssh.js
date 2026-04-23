@@ -1,13 +1,17 @@
 import { NodeSSH } from 'node-ssh';
 import { logger } from '../utils/logger.js';
 
-export function buildSshConfig(host, privateKeyPath, { username = 'admin', password } = {}) {
+export function buildSshConfig(host, privateKeyPath, { username = 'admin', password, port } = {}) {
   const config = {
     host,
     username,
     readyTimeout: 30000,
     keepaliveInterval: 10000,
   };
+
+  if (port) {
+    config.port = Number(port);
+  }
 
   if (privateKeyPath) {
     config.privateKeyPath = privateKeyPath;
@@ -18,8 +22,8 @@ export function buildSshConfig(host, privateKeyPath, { username = 'admin', passw
   return config;
 }
 
-export async function connectWithRetry(host, privateKeyPath, { username, password, retries = 5 } = {}) {
-  const config = buildSshConfig(host, privateKeyPath, { username, password });
+export async function connectWithRetry(host, privateKeyPath, { username, password, port, retries = 5 } = {}) {
+  const config = buildSshConfig(host, privateKeyPath, { username, password, port });
   const ssh = new NodeSSH();
 
   for (let attempt = 1; attempt <= retries; attempt++) {
@@ -51,7 +55,11 @@ export async function sshExec(ssh, command, { stream = false, cwd } = {}) {
 
   const result = await ssh.execCommand(command, { cwd });
   if (result.code !== 0) {
-    throw new Error(`Command failed (exit ${result.code}): ${result.stderr || result.stdout}`);
+    const details = [
+      result.stderr && `stderr: ${result.stderr}`,
+      result.stdout && `stdout: ${result.stdout}`,
+    ].filter(Boolean).join('\n') || '(no output)';
+    throw new Error(`Command failed (exit ${result.code}): ${command}\n${details}`);
   }
   return result;
 }
