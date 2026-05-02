@@ -33,6 +33,22 @@ export function createCli() {
     });
 
   program
+    .command('baguette')
+    .description('Connect to a Mac and serve iOS Simulator over HTTP via baguette (no VNC, no sudo)')
+    .requiredOption('--host <ip>', 'Mac instance IP or hostname')
+    .option('--user <name>', 'SSH username', 'admin')
+    .option('--key <path>', 'Path to SSH private key')
+    .option('--password <pass>', 'SSH password (if not using key)')
+    .option('--ssh-port <number>', 'SSH port', '22')
+    .option('--device <name>', 'Simulator device name', 'iPhone 17 Pro')
+    .option('--runtime <id>', 'iOS runtime identifier (default: latest available)')
+    .option('--port <number>', 'baguette HTTP port', '8421')
+    .action(async (options) => {
+      const { baguetteCommand } = await import('./commands/baguette.js');
+      await baguetteCommand(options);
+    });
+
+  program
     .command('status')
     .description('Show current connection info')
     .action(async () => {
