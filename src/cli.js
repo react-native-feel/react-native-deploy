@@ -61,6 +61,43 @@ export function createCli() {
       await submitCommand(options);
     });
 
+  // Credentials
+  const credentials = program
+    .command('credentials')
+    .description('Manage App Store Connect credentials (stored in macOS keychain via asc)');
+
+  credentials
+    .command('configure')
+    .description('Store App Store Connect API key in keychain')
+    .action(async () => {
+      const { credentialsConfigure } = await import('./commands/credentials.js');
+      await credentialsConfigure();
+    });
+
+  credentials
+    .command('status')
+    .description('Show currently active credentials')
+    .action(async () => {
+      const { credentialsStatus } = await import('./commands/credentials.js');
+      await credentialsStatus();
+    });
+
+  credentials
+    .command('switch <name>')
+    .description('Switch to a different asc auth profile')
+    .action(async (name) => {
+      const { credentialsSwitch } = await import('./commands/credentials.js');
+      await credentialsSwitch(name);
+    });
+
+  credentials
+    .command('logout [name]')
+    .description('Remove stored credentials')
+    .action(async (name) => {
+      const { credentialsLogout } = await import('./commands/credentials.js');
+      await credentialsLogout(name);
+    });
+
   // Infra
   const infra = program
     .command('infra')

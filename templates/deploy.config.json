@@ -11,10 +11,11 @@
     "nodeVersion": "20",
     "xcodeVersion": "16"
   },
-  "asc": {
-    "keyId": "",
-    "issuerId": "",
-    "privateKeyPath": "~/.appstoreconnect/AuthKey.p8"
+  "signing": {
+    "bundleId": null,
+    "profileType": "IOS_APP_STORE",
+    "createMissing": true,
+    "syncRepo": null
   },
   "repo": {
     "url": "",
@@ -25,6 +26,7 @@
       "buildType": "expo",
       "scheme": "MyApp",
       "buildConfiguration": "Release",
+      "distribution": "app-store",
       "env": {}
     },
     "preview": {
@@ -33,11 +35,13 @@
     },
     "development": {
       "extends": "production",
-      "buildConfiguration": "Debug"
+      "buildConfiguration": "Debug",
+      "distribution": "development"
     }
   },
   "submit": {
     "production": {
+      "ascAppId": null,
       "testFlightGroups": ["Internal Testers"],
       "whatToTest": ""
     }

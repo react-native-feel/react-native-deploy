@@ -1,0 +1,172 @@
+---
+title: build
+description: Build the iOS app on a remote Mac.
+---
+
+```bash
+rn-deploy build [options]
+```
+
+The workhorse command. Connects to a Mac (provisioning one if needed), authenticates ASC, fetches + installs signing assets, clones your repo, runs the build inside `tmux`, retrieves the `.ipa`, and optionally submits to TestFlight.
+
+## Flags
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--repo <url>` | from config | Git URL the remote clones from |
+| `--branch <name>` | `main` | Branch to build |
+| `--profile <name>` | `production` | [Build profile](/docs/build-profiles) name |
+| `--platform <p>` | `ios` | Reserved; only iOS today |
+| `--build-type <type>` | from profile | Override `expo` / `classic` |
+| `--scheme <name>` | from profile | Override Xcode scheme |
+| `--no-teardown` | off | Keep the EC2 instance alive after build |
+| `--non-interactive` | off | Disable prompts; fail fast on missing values |
+| `--auto-submit` | off | Submit to TestFlight after successful build |
+| `--message <text>` | — | Used as "What to Test" if `--auto-submit` |
+| `--resume` | off | Reconnect to an in-progress build's tmux session |
+| `--timeout <minutes>` | `60` | Hard timeout for the whole build |
+
+## What it does, in order
+
+<Steps>
+
+<Step>
+
+### Validate prerequisites + config
+
+Local `aws`, `git`, `ssh`, `asc` are checked. Config is loaded (Expo + overlay + env + flags) and validated.
+
+</Step>
+
+<Step>
+
+### Provision or reuse a Mac
+
+If `infra state` is stored and the instance is reachable, reuse it. Otherwise call the EC2 Mac provisioner (or fail if you're using a non-AWS host without an `--host` value).
+
+</Step>
+
+<Step>
+
+### SSH + provision the host
+
+Installs Homebrew, asc, Node, CocoaPods, tmux, verifies Xcode. Skipped if a `customAmiId` was used.
+
+</Step>
+
+<Step>
+
+### Authenticate ASC on the remote
+
+Uploads your `.p8` to `/tmp/AuthKey.p8` and runs `asc auth login --bypass-keychain`.
+
+</Step>
+
+<Step>
+
+### Fetch + install signing assets
+
+`asc signing fetch` (or `asc signing sync pull` if `signing.syncRepo` is set), then `security import` the `.p12` and `asc profiles local install` the `.mobileprovision` into a dedicated build keychain.
+
+</Step>
+
+<Step>
+
+### Clone the repo + generate `ExportOptions.plist`
+
+`git clone --depth 1 --single-branch` your repo into `~/build-workspace`. Writes `ExportOptions.plist` with the real team ID, bundle ID, and profile UUID.
+
+</Step>
+
+<Step>
+
+### Run the build inside tmux
+
+For `buildType: expo`:
+
+```text
+npm install
+npx expo prebuild --platform ios --clean
+cd ios && pod install
+xcodebuild archive -workspace ios/MyApp.xcworkspace -scheme MyApp \
+  -configuration Release -archivePath build/MyApp.xcarchive \
+  -destination "generic/platform=iOS" CODE_SIGN_STYLE=Manual
+xcodebuild -exportArchive -archivePath build/MyApp.xcarchive \
+  -exportPath build/export -exportOptionsPlist ExportOptions.plist
+```
+
+For `buildType: classic`: skips `expo prebuild`, otherwise identical.
+
+Output is streamed to your terminal AND tee'd to `/tmp/rn-deploy-build.log` on the remote.
+
+</Step>
+
+<Step>
+
+### Retrieve the `.ipa`
+
+The signed `.ipa` is downloaded to the current directory as `<scheme>-<timestamp>.ipa`.
+
+</Step>
+
+<Step>
+
+### Optional TestFlight submission
+
+If `--auto-submit`, uploads via `asc builds upload` and assigns the configured TestFlight groups.
+
+</Step>
+
+<Step>
+
+### Optional AMI caching
+
+If you provisioned a fresh instance (no `customAmiId` in config), you're offered to save the warm state as a custom AMI so future builds skip the 10-minute provisioning step.
+
+</Step>
+
+<Step>
+
+### Teardown
+
+The dedicated keychain is destroyed, asc credentials are logged out, signing dir is removed. Unless `--no-teardown`, the EC2 instance is also terminated.
+
+</Step>
+
+</Steps>
+
+## Resilience
+
+Builds run inside a `tmux` session named `rn-deploy-build`. If your network drops:
+
+```bash
+rn-deploy build --resume
+```
+
+Reconnects to the live tmux session and resumes streaming logs. If the build already finished, you'll see the final log instead.
+
+## Examples
+
+```bash
+# Most common: build production from main and ship to TestFlight
+rn-deploy build --profile production --auto-submit --message "Fix login crash"
+
+# Build a feature branch ad-hoc for QA
+rn-deploy build --profile preview --branch feature/new-checkout
+
+# Long build on a slow project — bump the timeout
+rn-deploy build --profile production --timeout 90
+
+# Debug an Xcode signing issue — keep the instance alive
+rn-deploy build --profile production --no-teardown
+# ...then SSH in manually to inspect
+
+# CI mode (no prompts, fail fast)
+rn-deploy build --profile production --non-interactive --auto-submit
+```
+
+## See also
+
+- [Build profiles](/docs/build-profiles)
+- [Signing](/docs/signing)
+- [Troubleshooting](/docs/guides/troubleshooting)

@@ -1,0 +1,102 @@
+---
+title: Overview
+description: A self-hosted, EAS-compatible build and submit pipeline for React Native and Expo iOS apps.
+icon: Rocket
+---
+
+`rn-deploy` is a CLI that builds React Native / Expo iOS apps on a Mac you control (AWS EC2 Mac, MacinCloud, or any SSH-reachable Mac) and submits them to TestFlight — without sending your source, credentials, or signing assets to a third-party build service.
+
+It reads the same `eas.json` and `app.json` files you already use with Expo Application Services, so dropping it into an existing Expo project is zero-config.
+
+## Why
+
+<Cards>
+  <Card title="Replace EAS Build" description="Same eas.json/app.json setup; your code never leaves your infrastructure." />
+  <Card title="Replace EAS Submit" description="Uploads .ipa to App Store Connect and assigns TestFlight groups using the asc CLI." />
+  <Card title="Bring-your-own Mac" description="Works against an EC2 Mac Dedicated Host, a MacinCloud managed plan, or any Mac reachable over SSH." />
+  <Card title="Real signing on the build host" description="Fetches certs + profiles via the asc CLI and installs them into a dedicated keychain — no Apple ID password prompt, no hand-managed keychains." />
+</Cards>
+
+## How it works at a glance
+
+<Steps>
+
+<Step>
+
+### Read project config
+
+`rn-deploy` discovers `eas.json` + `app.json` (or `app.config.{js,ts}`) in the current directory and maps EAS build/submit profiles into its internal format. A `deploy.config.json` overlay can override anything Expo doesn't express (AWS region, signing sync repo, repo URL).
+
+</Step>
+
+<Step>
+
+### Provision or reuse a Mac
+
+Optionally provisions an AWS EC2 Mac Dedicated Host + instance, or reuses an existing instance (MacinCloud, your own colo, etc.). Connects over SSH.
+
+</Step>
+
+<Step>
+
+### Authenticate App Store Connect
+
+Resolves your ASC API key from the macOS keychain (managed by [`asc auth`](/docs/credentials)) and uploads it to the remote Mac just for the duration of the build.
+
+</Step>
+
+<Step>
+
+### Fetch + install signing assets
+
+Calls `asc signing fetch` (or `asc signing sync pull` for fastlane-match-style storage) on the remote Mac. Imports the `.p12` into a dedicated build keychain and installs the `.mobileprovision` into Xcode's profiles directory.
+
+</Step>
+
+<Step>
+
+### Build inside tmux
+
+Runs `expo prebuild` + `pod install` + `xcodebuild archive/export` inside a tmux session so you can disconnect, reconnect, or resume on flaky networks.
+
+</Step>
+
+<Step>
+
+### Submit to TestFlight (optional)
+
+If `--auto-submit` is passed, uploads the `.ipa` via `asc builds upload` and assigns the configured TestFlight groups via `asc publish testflight`.
+
+</Step>
+
+</Steps>
+
+## At a glance
+
+<Files>
+  <Folder name="your-expo-project" defaultOpen>
+    <File name="app.json" />
+    <File name="eas.json" />
+    <File name="deploy.config.json (optional overlay)" />
+    <File name="package.json" />
+  </Folder>
+</Files>
+
+```bash
+# One-time
+brew install asc
+npm i -g rn-deploy
+rn-deploy credentials configure
+
+# Each build
+rn-deploy build --profile production --auto-submit
+```
+
+## Next steps
+
+<Cards>
+  <Card title="Getting started" href="/docs/getting-started" description="Install, configure credentials, run your first build." />
+  <Card title="EAS compatibility" href="/docs/eas-compatibility" description="Field-by-field mapping from eas.json to rn-deploy." />
+  <Card title="Command reference" href="/docs/commands" description="Every flag for every command." />
+  <Card title="Signing" href="/docs/signing" description="How certs, profiles, and keychains are managed on the build host." />
+</Cards>

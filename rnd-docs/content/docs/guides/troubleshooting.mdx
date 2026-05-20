@@ -1,0 +1,147 @@
+---
+title: Troubleshooting
+description: Common failure modes and how to fix them.
+---
+
+A reference for the errors you'll most likely hit. Each entry is keyed by the message or symptom you'll see.
+
+## Configuration
+
+### `No config found in <dir>. Expected eas.json/app.json or deploy.config.json.`
+
+You ran `rn-deploy build` outside an Expo project and without a `deploy.config.json`. Either `cd` into the right directory, or run `rn-deploy setup` to scaffold one.
+
+### `Config validation failed: Missing required field: repo.url`
+
+`rn-deploy` clones your source code on the remote Mac — it needs a git URL. Set it in `deploy.config.json` under `repo.url`, or pass `--repo`.
+
+### `Profile "<name>" not found in config`
+
+Typo in `--profile`, or the profile is only defined in `eas.json` but you have a `deploy.config.json` overlay that has its own `build` block without that profile. Overlay `build` blocks **merge by profile name**, but the profile must exist in at least one source.
+
+## Credentials
+
+### `No App Store Connect credentials found. Run "rn-deploy credentials configure"`
+
+The credentials chain ([config → env → keychain](/docs/credentials)) came up empty. Run `rn-deploy credentials status` to see which step failed.
+
+### `asc keychain has credentials for keyId <id> but the .p8 file was not found locally`
+
+`asc` knows your key, but we can't find the actual `.p8` to upload to the remote. Put it at one of:
+
+- `~/.appstoreconnect/AuthKey.p8`
+- `~/.appstoreconnect/AuthKey_<keyId>.p8`
+- The path you tell us via `ASC_PRIVATE_KEY_PATH` env var
+
+### `Failed to evaluate app.config.ts. Make sure "expo" is installed in the project`
+
+We shell out to `npx --no-install expo config --type public --json` to read dynamic configs. The project must have `expo` in `node_modules`. Run `npm install` (or `pnpm/yarn install`) in the project first.
+
+## Signing
+
+### `No provisioning profile (.mobileprovision) found after asc signing fetch`
+
+`asc` couldn't find or create a profile for your bundle ID. Common causes:
+
+- Bundle ID in `app.json` doesn't exist in App Store Connect → register it via `asc bundle-ids create`
+- `--create-missing` is disabled and no profile exists → set `signing.createMissing: true` or create one manually
+- The bundle ID belongs to a different team than your API key's team → check `asc auth status`
+
+### `Only a public certificate (foo.cer) was fetched. xcodebuild needs the matching private key.`
+
+You hit the [private-key problem](/docs/signing#the-private-key-problem). `asc signing fetch` can only return the public `.cer` for an existing certificate. Solutions:
+
+1. Switch to `asc signing sync` — see [signing sync guide](/docs/guides/signing-sync)
+2. Generate a *new* cert with `--create-missing` (consumes one of your 2 distribution-cert slots)
+3. Manually export `.p12` from Keychain Access on the original CSR machine and use `asc signing sync push` to share it
+
+### `errSecInternalComponent` during `security import`
+
+Two known causes:
+
+- Wrong `.p12` password — set `ASC_P12_PASSWORD` correctly
+- The keychain wasn't unlocked. Our build keychain should be unlocked but if you're running multiple parallel builds on the same host, they may race. Run them serially or use separate hosts.
+
+### `Code Sign error: No matching profile found`
+
+`xcodebuild` looked for a profile in `~/Library/MobileDevice/Provisioning Profiles/` that matches the bundle ID + cert combination, and didn't find one. Confirm:
+
+```bash
+ssh build-mac 'asc profiles local list'
+```
+
+The expected profile should appear, with the right bundle ID. If not, the fetch step failed silently — re-run with `DEBUG=1`.
+
+## Build
+
+### `Build timed out after 60 minutes`
+
+The default timeout. Bump it with `--timeout 90` for slow projects, or investigate why the build is taking so long (CocoaPods cache, slow remote, etc.).
+
+### `xcodebuild: error: Unable to find a destination matching the provided destination specifier`
+
+Xcode major version on the remote doesn't match what your project's `Podfile` / `project.pbxproj` expects. Either:
+
+- Set `aws.xcodeVersion` in `deploy.config.json` to match
+- Or update the remote Xcode and re-snapshot the AMI
+
+### `Command failed (exit 65): xcodebuild archive`
+
+Generic xcodebuild failure. The error is **above** that line in the log. Look for the actual Swift/Obj-C/CocoaPods error. To debug interactively:
+
+```bash
+rn-deploy build --no-teardown --profile production
+# wait for failure, then:
+ssh -i ~/.rn-deploy/keys/<key>.pem ec2-user@<ip>
+cd ~/build-workspace && tail -200 /tmp/rn-deploy-build.log
+```
+
+## Network / SSH
+
+### `SSH connection failed after 3 attempts`
+
+Most often: your public IP changed. Run `rn-deploy infra update-ip` to re-authorize.
+
+Other possibilities: instance not yet ready (wait ~2 minutes after `infra up`), security group locked down too tight, or the host is genuinely down.
+
+### `Permission denied (publickey)` when cloning your repo
+
+The **remote Mac**'s SSH key isn't authorized on your git host. Either:
+
+- Use HTTPS with a token in the URL: `https://x-token:$GITHUB_TOKEN@github.com/org/repo.git`
+- Add the remote's SSH public key as a deploy key on the repo (preferred)
+- Use `--repo` to override with a different URL per-build
+
+## Submission
+
+### `No apps found in App Store Connect. Create one first.`
+
+You're trying to submit a build for a bundle ID that doesn't have an App Store Connect app record. Create one via the ASC web UI (or `asc app-setup` / `asc apps create`), then re-run.
+
+### `Multiple apps found; using <id>. Set submit.ascAppId to disambiguate.`
+
+Not an error — but if you have multiple apps with similar names, set `submit.<profile>.ascAppId` (or copy from `eas.json` `submit.ios.ascAppId`) to be explicit.
+
+### `Build still processing` for hours after upload
+
+`asc publish testflight --wait` polls until processing finishes. Apple's processing can take 30+ minutes for the first build of a new app, less for subsequent ones. If it's been over 60 minutes, check ASC's web UI for processing errors (missing entitlements, ITMS errors, etc.).
+
+## Performance
+
+### Cold builds take 15+ minutes
+
+That's the provisioning + cocoapods + Xcode warm-up tax. Save an AMI after the first successful build and set `aws.customAmiId` — subsequent builds will skip provisioning and typically take 5-8 minutes.
+
+### Every build downloads the same CocoaPods
+
+CocoaPods doesn't have a built-in cache server. Two options:
+
+- Bake `Pods/` into a custom AMI (only works if `Podfile.lock` is stable)
+- Set up a private CocoaPods cache server (advanced)
+
+## Still stuck?
+
+1. Re-run with `DEBUG=1` for verbose SSH and command logs
+2. Use `--no-teardown` and SSH in to inspect remote state directly
+3. Check `/tmp/rn-deploy-build.log` on the remote for the full build output
+4. Open an issue with the failing log lines + redacted config

@@ -1,0 +1,173 @@
+---
+title: Build profiles
+description: How development, preview, and production profiles work — and how to extend them.
+icon: Layers
+---
+
+Build profiles are named configurations that bundle together everything a single build needs: scheme, build configuration, distribution method, environment variables, and (implicitly) which provisioning profile to fetch.
+
+They map 1:1 to `eas.json` `build.<profile>` blocks.
+
+## Built-in conventions
+
+If you scaffold via `rn-deploy setup` you get three profiles by default:
+
+| Profile | distribution | buildConfiguration | profileType | Typical use |
+| --- | --- | --- | --- | --- |
+| `development` | `development` | `Debug` | `IOS_APP_DEVELOPMENT` | Local dev clients on registered devices |
+| `preview` | `ad-hoc` | `Release` | `IOS_AD_HOC` | Internal QA installs without TestFlight |
+| `production` | `app-store` | `Release` | `IOS_APP_STORE` | TestFlight + App Store |
+
+These are conventions — there's nothing magic about the names. You can add `staging`, `pr-preview`, `nightly`, etc.
+
+## Selecting a profile
+
+```bash
+rn-deploy build --profile production
+rn-deploy build --profile preview
+rn-deploy build --profile development
+```
+
+Default if you omit the flag: `production`.
+
+## Inheritance with `extends`
+
+Profiles can extend each other. `rn-deploy` walks the chain, merges shallow keys, and deep-merges `env`:
+
+```json title="eas.json"
+{
+  "build": {
+    "production": {
+      "ios": { "buildConfiguration": "Release" },
+      "env": { "API_URL": "https://api.example.com" }
+    },
+    "staging": {
+      "extends": "production",
+      "env": { "API_URL": "https://staging.example.com" }
+    },
+    "pr-preview": {
+      "extends": "staging",
+      "distribution": "internal"
+    }
+  }
+}
+```
+
+Resolved `pr-preview` ends up as:
+
+```json
+{
+  "buildType": "expo",
+  "buildConfiguration": "Release",
+  "distribution": "internal",
+  "profileType": "IOS_AD_HOC",
+  "env": { "API_URL": "https://staging.example.com" }
+}
+```
+
+<Callout type="warn">
+Circular extends (`a → b → a`) are detected and rejected at config load time. The maximum extends depth is 5.
+</Callout>
+
+## Distribution and profile type
+
+`distribution` determines which provisioning profile `rn-deploy` asks ASC for:
+
+<Tabs items={["app-store", "ad-hoc / internal", "enterprise", "development"]}>
+
+```json tab="app-store"
+// TestFlight + App Store
+{ "distribution": "app-store" }
+// → asc signing fetch --profile-type IOS_APP_STORE
+```
+
+```json tab="ad-hoc / internal"
+// Up to 100 registered UDIDs; install via TestFlight-style link or MDM
+{ "distribution": "ad-hoc" }
+// or { "distribution": "internal" }
+// → asc signing fetch --profile-type IOS_AD_HOC
+```
+
+```json tab="enterprise"
+// Apple Enterprise Developer Program only
+{ "distribution": "enterprise" }
+// → asc signing fetch --profile-type IOS_IN_HOUSE
+```
+
+```json tab="development"
+// Local dev clients on registered devices
+{ "distribution": "development" }
+// → asc signing fetch --profile-type IOS_APP_DEVELOPMENT
+//   you must register devices ahead of time in ASC
+```
+
+</Tabs>
+
+You can also set `profileType` directly to bypass the inference.
+
+## Environment variables
+
+`env` is a flat key/value map exported into the remote shell before `xcodebuild` runs:
+
+```json
+{
+  "build": {
+    "production": {
+      "env": {
+        "SENTRY_DSN": "https://...",
+        "API_URL": "https://api.example.com",
+        "RCT_NEW_ARCH_ENABLED": "1"
+      }
+    }
+  }
+}
+```
+
+For secrets you don't want in the repo, leave them out of `env` and pass via your CI runner's secret manager — they'll be inherited through `ssh ExecCommand`'s environment.
+
+<Callout type="info">
+`rn-deploy` does NOT have an encrypted server-side env store (the EAS Secrets equivalent). Use your CI's secrets and let them flow into the SSH session naturally.
+</Callout>
+
+## Per-profile overrides via CLI
+
+You can override individual fields without editing config:
+
+```bash
+rn-deploy build --profile production --scheme MyAppEnterprise
+rn-deploy build --profile production --build-type classic
+rn-deploy build --profile production --branch hotfix/login
+```
+
+## Choosing `buildType`
+
+| `buildType` | Workflow | When to use |
+| --- | --- | --- |
+| `expo` (default) | Runs `expo prebuild --platform ios --clean` before `xcodebuild` | Managed Expo workflow, or any project that regenerates native code |
+| `classic` | Skips prebuild; runs `pod install` + `xcodebuild` against the checked-in `ios/` directory | Bare RN where `ios/` is hand-maintained |
+
+If you've ejected from Expo and committed the `ios/` folder, use `classic`. If `npx expo prebuild` produces your `ios/` folder, use `expo`.
+
+## A complete profile
+
+For reference, the most explicit form of a single profile:
+
+```json
+{
+  "build": {
+    "production": {
+      "buildType": "expo",
+      "scheme": "MyApp",
+      "buildConfiguration": "Release",
+      "distribution": "app-store",
+      "profileType": "IOS_APP_STORE",
+      "bundleId": "com.example.app",
+      "env": {
+        "API_URL": "https://api.example.com"
+      }
+    }
+  }
+}
+```
+
+Most fields are optional — you'd usually only set what differs from `production`'s defaults.

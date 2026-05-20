@@ -1,0 +1,49 @@
+---
+title: Command reference
+description: Every rn-deploy command, its flags, and what it does under the hood.
+icon: Terminal
+---
+
+`rn-deploy` ships five top-level commands. Run any of them with `--help` for the live flag list.
+
+<Cards>
+  <Card title="setup" href="/docs/commands/setup" description="First-time scaffolding: credentials + deploy.config.json." />
+  <Card title="credentials" href="/docs/commands/credentials" description="Manage App Store Connect API keys in the macOS keychain." />
+  <Card title="build" href="/docs/commands/build" description="Build the iOS app on a remote Mac." />
+  <Card title="submit" href="/docs/commands/submit" description="Standalone TestFlight submission." />
+  <Card title="infra" href="/docs/commands/infra" description="Provision/teardown the bundled EC2 Mac infrastructure." />
+</Cards>
+
+## Quick reference
+
+```text
+rn-deploy setup
+rn-deploy credentials {configure | status | switch <name> | logout [name]}
+rn-deploy build [options]
+rn-deploy submit [options]
+rn-deploy infra {up | down | status | ami-list | ami-delete | update-ip}
+```
+
+## Common flags
+
+| Flag | Applies to | Description |
+| --- | --- | --- |
+| `--profile <name>` | `build`, `submit` | Build/submit profile name (default `production`) |
+| `--non-interactive` | `build`, `infra up/down`, `setup` | Disable prompts; fail fast on missing values |
+| `--no-teardown` | `build` | Keep the EC2 instance alive after build (useful for debugging) |
+| `--timeout <minutes>` | `build` | Hard timeout for the entire build (default 60) |
+| `--resume` | `build` | Reconnect to an in-progress build's tmux session |
+
+## Exit codes
+
+| Code | Meaning |
+| --- | --- |
+| `0` | Success |
+| `1` | Generic error (config validation, SSH failure, build failure) |
+| Other | Underlying CLI/system error code propagated |
+
+Use `DEBUG=1` for verbose logging:
+
+```bash
+DEBUG=1 rn-deploy build --profile production
+```

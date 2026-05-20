@@ -1,0 +1,167 @@
+---
+title: Signing sync (encrypted git repo)
+description: Share certs and provisioning profiles across machines using asc signing sync — the recommended setup for CI and multi-host workflows.
+---
+
+`asc signing sync` is a fastlane-match-style workflow: your `.p12` + `.mobileprovision` files live in an **encrypted git repo**, and every build host pulls + decrypts them on demand. It's the only way to keep one consistent signing identity across ephemeral build hosts.
+
+## When you need this
+
+<Cards>
+  <Card title="CI runners" description="GitHub Actions, GitLab, etc. — fresh runner every job." />
+  <Card title="EC2 Mac fresh boots" description="Apple caps you at 2 distribution certs per team — fresh hosts otherwise create new ones." />
+  <Card title="Multiple developers" description="Everyone on the team signs with the same identity instead of one personal cert." />
+  <Card title="Disaster recovery" description="Your signing identity is in git, not on one laptop that can be lost." />
+</Cards>
+
+If your only build host is your one laptop, you can skip this — `asc signing fetch --create-missing` (default) works fine.
+
+## One-time setup
+
+<Steps>
+
+<Step>
+
+### Create the repo
+
+A private repo somewhere `asc` and your build hosts can reach via SSH:
+
+```bash
+gh repo create org/ios-signing --private --clone
+cd ios-signing
+```
+
+</Step>
+
+<Step>
+
+### Push existing assets
+
+On a machine that already has the `.p12` and `.mobileprovision`:
+
+```bash
+asc signing sync push \
+  --bundle-id com.example.app \
+  --profile-type IOS_APP_STORE \
+  --repo git@github.com:org/ios-signing.git
+```
+
+`asc` encrypts the assets symmetrically before pushing — the encryption passphrase is stored in your local keychain. Stash it somewhere safe (a password manager) so other team members + CI can decrypt.
+
+</Step>
+
+<Step>
+
+### Point `rn-deploy` at the repo
+
+```json title="deploy.config.json"
+{
+  "signing": {
+    "syncRepo": "git@github.com:org/ios-signing.git"
+  }
+}
+```
+
+</Step>
+
+<Step>
+
+### Give the build host SSH access
+
+The remote Mac needs read access to the signing repo. Add a deploy key:
+
+```bash
+# On the remote Mac:
+ssh-keygen -t ed25519 -C "rn-deploy@build-host" -f ~/.ssh/signing_sync
+cat ~/.ssh/signing_sync.pub
+# Paste that into GitHub → ios-signing repo → Settings → Deploy keys
+```
+
+</Step>
+
+<Step>
+
+### Decryption passphrase on the host
+
+`asc signing sync pull` needs the decryption passphrase. Set `ASC_SYNC_PASSPHRASE` env var on the build host, or store it in the host's keychain.
+
+</Step>
+
+</Steps>
+
+## How `rn-deploy` uses it
+
+When `signing.syncRepo` is set, the [signing pipeline](/docs/signing#the-signing-pipeline) switches from:
+
+```bash
+asc signing fetch --bundle-id ... --profile-type ... --output /tmp/rn-deploy-signing
+```
+
+to:
+
+```bash
+asc signing sync pull --repo $syncRepo --output-dir /tmp/rn-deploy-signing
+```
+
+Everything downstream (keychain import, profile install) stays the same.
+
+## Adding a new bundle ID
+
+When you ship an extension or new app:
+
+```bash
+# From a host that already has the cert/key:
+asc signing sync push \
+  --bundle-id com.example.app.widget \
+  --profile-type IOS_APP_STORE \
+  --repo git@github.com:org/ios-signing.git
+```
+
+Every subsequent `rn-deploy build` will see both bundles in `/tmp/rn-deploy-signing` after the pull.
+
+## Rotating certificates
+
+When Apple rotates your distribution cert (annually), or you revoke one:
+
+<Steps>
+
+<Step>
+
+### Generate new cert + push
+
+On the machine where you create the new cert (you still need the CSR to keep the private key):
+
+```bash
+asc signing sync push --bundle-id ... --profile-type IOS_APP_STORE --repo ...
+```
+
+</Step>
+
+<Step>
+
+### Trigger builds
+
+That's it. Next build, every host pulls the new cert.
+
+</Step>
+
+</Steps>
+
+## Security notes
+
+<Callout type="warn">
+The sync repo is encrypted, but **anyone with the decryption passphrase + repo read access can sign as your team**. Treat the passphrase as a Tier-1 secret: keychain on dev machines, secrets manager in CI.
+</Callout>
+
+<Callout type="info">
+The decryption passphrase is rotated via `asc signing sync rotate` — see `asc signing sync --help`.
+</Callout>
+
+## Troubleshooting
+
+| Symptom | Likely cause |
+| --- | --- |
+| `Permission denied (publickey)` on pull | Deploy key not added to the signing repo, or wrong key path on the host |
+| `Decryption failed` | Wrong passphrase, or repo was re-encrypted (use `asc signing sync rotate` doc) |
+| Build picks wrong profile | Multiple profiles for the same bundle ID — the most recently pushed one wins; clean up old ones via `asc profiles delete` |
+| Cert installs but `codesign` complains "no identity found" | The `.p12` in the repo was exported without the private key. Re-push from the original CSR-generating machine |

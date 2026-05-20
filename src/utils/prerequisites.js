@@ -44,6 +44,10 @@ export async function verifyPrerequisites() {
     errors.push('SSH client not found. It should be available by default on macOS/Linux.');
   }
 
+  if (!checkCommandExists('asc')) {
+    errors.push('asc CLI not installed. Install it: brew install asc');
+  }
+
   if (errors.length > 0) {
     throw new Error(`Prerequisites check failed:\n${errors.map(e => `  ✖ ${e}`).join('\n')}`);
   }

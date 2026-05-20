@@ -1,0 +1,16 @@
+{
+  "title": "rn-deploy",
+  "pages": [
+    "index",
+    "getting-started",
+    "eas-compatibility",
+    "configuration",
+    "build-profiles",
+    "signing",
+    "credentials",
+    "---Reference---",
+    "commands",
+    "---Guides---",
+    "guides"
+  ]
+}

@@ -2,29 +2,44 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { validateConfig } from './schema.js';
+import { loadFromExpoProject, findExpoProject } from './expo-loader.js';
 
 const CONFIG_FILENAME = 'deploy.config.json';
 
+// Loading order:
+//   1) deploy.config.json present       → use it (legacy / explicit)
+//   2) eas.json / app.json present       → derive config from Expo project
+//   3) Both present                      → merge (deploy.config.json overlays Expo)
+//   4) Neither                           → throw, suggest setup
 export function loadConfig(dir = process.cwd()) {
-  const configPath = join(resolve(dir), CONFIG_FILENAME);
+  const root = resolve(dir);
+  const configPath = join(root, CONFIG_FILENAME);
+  const hasDeployConfig = existsSync(configPath);
+  const expoProject = findExpoProject(root);
 
-  if (!existsSync(configPath)) {
-    throw new Error(
-      `deploy.config.json not found in ${dir}. Run "rn-deploy setup" to create one.`
-    );
+  let overlay = null;
+  if (hasDeployConfig) {
+    const raw = readFileSync(configPath, 'utf-8');
+    try {
+      overlay = JSON.parse(raw);
+    } catch {
+      throw new Error(`Invalid JSON in ${configPath}`);
+    }
+    if (overlay.asc?.privateKeyPath?.startsWith('~')) {
+      overlay.asc.privateKeyPath = overlay.asc.privateKeyPath.replace('~', homedir());
+    }
   }
 
-  const raw = readFileSync(configPath, 'utf-8');
   let config;
-  try {
-    config = JSON.parse(raw);
-  } catch {
-    throw new Error(`Invalid JSON in ${configPath}`);
-  }
-
-  // Expand ~ in privateKeyPath
-  if (config.asc?.privateKeyPath?.startsWith('~')) {
-    config.asc.privateKeyPath = config.asc.privateKeyPath.replace('~', homedir());
+  if (expoProject) {
+    config = loadFromExpoProject(root, overlay);
+  } else if (overlay) {
+    config = overlay;
+  } else {
+    throw new Error(
+      `No config found in ${root}. Expected eas.json/app.json (Expo project) or deploy.config.json. ` +
+      `Run "rn-deploy setup" to create one.`
+    );
   }
 
   return config;

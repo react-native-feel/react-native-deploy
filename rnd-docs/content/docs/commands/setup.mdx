@@ -1,0 +1,84 @@
+---
+title: setup
+description: Interactive first-time configuration.
+---
+
+```bash
+rn-deploy setup
+```
+
+What it does, in order:
+
+<Steps>
+
+<Step>
+
+### Verify local prerequisites
+
+Checks for `aws`, `git`, `ssh`, and `asc`. Fails fast if any are missing.
+
+</Step>
+
+<Step>
+
+### Configure ASC credentials
+
+If `asc auth status` reports no active profile, it walks you through [`rn-deploy credentials configure`](/docs/commands/credentials) inline. If you already have credentials it skips this step.
+
+</Step>
+
+<Step>
+
+### Detect Expo project
+
+If `eas.json`, `app.json`, or `app.config.{js,ts}` is present, `rn-deploy` treats this as an Expo project and offers to write a *thin overlay* `deploy.config.json` (just AWS region, repo URL, optional `signing.syncRepo`).
+
+For non-Expo projects, it scaffolds a full `deploy.config.json` with prompts for scheme + build type.
+
+</Step>
+
+<Step>
+
+### Write `deploy.config.json`
+
+Saved in the current directory. Existing file? You'll be asked to confirm overwrite.
+
+</Step>
+
+</Steps>
+
+## Prompts
+
+You'll see different prompts depending on what's detected:
+
+<Tabs items={["Expo project", "Non-Expo project"]}>
+
+```text tab="Expo project"
+✔ Detected Expo project — eas.json/app.json will be used for build profiles and bundleId.
+? Write a deploy.config.json overlay? Yes
+? AWS region? us-east-1
+? Git repository URL: git@github.com:org/myapp.git
+? Default branch: main
+? Configure a signing sync repo (asc signing sync)? No
+✔ Config saved to ./deploy.config.json
+```
+
+```text tab="Non-Expo project"
+? AWS region? us-east-1
+? Git repository URL: git@github.com:org/myapp.git
+? Default branch: main
+? Xcode scheme name: MyApp
+? Build type? Classic (xcodebuild directly)
+? Configure a signing sync repo (asc signing sync)? No
+✔ Config saved to ./deploy.config.json
+```
+
+</Tabs>
+
+## Skip the wizard
+
+If you'd rather just write `deploy.config.json` by hand, copy the [template](/docs/configuration#deploy-config-json-reference). `setup` is purely a convenience.
+
+## Re-running
+
+`setup` is idempotent — re-running won't reconfigure asc unless you say yes. It's safe to run after rotating credentials or changing repos.

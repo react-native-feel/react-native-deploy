@@ -1,10 +1,11 @@
 import { loadConfig } from '../config/loader.js';
-import { resolveProfile } from '../config/profiles.js';
 import { loadState } from '../infra/state.js';
 import { createSshConnection, sshExec, sshUpload } from '../remote/ssh.js';
 import { getPrivateKeyPath } from '../infra/key-pair.js';
 import { logger } from '../utils/logger.js';
 import { input } from '../utils/prompts.js';
+import { authenticateAsc, cleanupAscCredentials } from '../remote/signing.js';
+import { resolveAscCredentials } from '../config/credentials.js';
 
 // Note: submit requires a running EC2 instance because asc runs on the remote
 // instance (not locally). Use "rn-deploy build --auto-submit" for the common case,
@@ -21,6 +22,10 @@ export async function submitCommand(options = {}) {
   const ssh = await createSshConnection(state.publicIp, keyPath);
 
   try {
+    // Ensure asc is authenticated on remote (build path already does this; standalone submit needs it)
+    const creds = resolveAscCredentials(config);
+    await authenticateAsc(ssh, creds);
+
     const ipaPath = options.ipa;
     let remoteIpaPath = ipaPath;
 
@@ -43,6 +48,7 @@ export async function submitCommand(options = {}) {
       whatToTest: options.whatToTest || options.message,
     });
   } finally {
+    try { await cleanupAscCredentials(ssh); } catch { /* ignore */ }
     ssh.dispose();
   }
 }
@@ -53,14 +59,20 @@ export async function submitToTestFlight(ssh, { ipaPath, config, profileName, gr
   const testFlightGroups = groups?.split(',') || submitProfile.testFlightGroups || [];
   const testNotes = whatToTest || submitProfile.whatToTest || '';
 
-  // Get app ID from asc
-  logger.info('Looking up app information...');
-  const appsResult = await sshExec(ssh, 'asc apps list --json');
-  const apps = JSON.parse(appsResult.stdout);
-  if (!apps || apps.length === 0) {
-    throw new Error('No apps found in App Store Connect. Create one first.');
+  // Resolve appId — prefer eas.json submit.ios.ascAppId if present
+  let appId = submitProfile.ascAppId;
+  if (!appId) {
+    logger.info('Looking up app information...');
+    const appsResult = await sshExec(ssh, 'asc apps list --output json');
+    const apps = JSON.parse(appsResult.stdout);
+    if (!apps || apps.length === 0) {
+      throw new Error('No apps found in App Store Connect. Create one first.');
+    }
+    if (apps.length > 1) {
+      logger.warn(`Multiple apps found; using ${apps[0].id}. Set submit.ascAppId in your config to disambiguate.`);
+    }
+    appId = apps[0].id;
   }
-  const appId = apps[0].id; // TODO: let user select if multiple apps
 
   // Upload build
   logger.info('Uploading build to App Store Connect...');

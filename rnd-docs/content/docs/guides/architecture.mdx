@@ -1,0 +1,145 @@
+---
+title: Architecture
+description: How rn-deploy is structured internally — useful when contributing, debugging, or auditing.
+---
+
+This page is reference material for anyone hacking on `rn-deploy` itself, or auditing how your code/credentials flow through the system.
+
+## Layout
+
+<Files>
+  <Folder name="src" defaultOpen>
+    <File name="cli.js (commander setup)" />
+    <Folder name="commands">
+      <File name="setup.js" />
+      <File name="build.js" />
+      <File name="submit.js" />
+      <File name="credentials.js" />
+      <File name="infra.js" />
+    </Folder>
+    <Folder name="config">
+      <File name="loader.js (resolution order)" />
+      <File name="expo-loader.js (eas.json/app.json → internal shape)" />
+      <File name="profiles.js (extends resolution)" />
+      <File name="schema.js (validation)" />
+      <File name="credentials.js (ASC creds chain)" />
+    </Folder>
+    <Folder name="remote">
+      <File name="ssh.js (node-ssh wrapper)" />
+      <File name="provision.js (brew, asc, node, pod, tmux)" />
+      <File name="signing.js (asc auth + signing fetch + keychain)" />
+    </Folder>
+    <Folder name="build">
+      <File name="expo.js (expo prebuild + xcodebuild)" />
+      <File name="classic.js (xcodebuild only)" />
+      <File name="artifacts.js (.ipa retrieval)" />
+    </Folder>
+    <Folder name="infra">
+      <File name="instance.js, dedicated-host.js, ami.js, key-pair.js, …" />
+    </Folder>
+    <File name="utils/* (logger, prompts, prereq checks)" />
+  </Folder>
+</Files>
+
+## Data flow
+
+```text
+┌────────────────────────────────┐
+│ Your project                   │
+│  eas.json, app.json,           │
+│  deploy.config.json (overlay)  │
+└──────────────┬─────────────────┘
+               │ loadConfig()
+               ▼
+┌────────────────────────────────┐
+│ Resolved config                │
+│  build profiles, signing,      │
+│  repo, aws, submit             │
+└──────────────┬─────────────────┘
+               │ buildCommand()
+               ▼
+┌────────────────────────────────┐    ┌────────────────────────┐
+│ Local                          │    │ macOS Keychain (asc)   │
+│  resolveAscCredentials()       │◀───│  ASC API key material  │
+└──────────────┬─────────────────┘    └────────────────────────┘
+               │ SSH
+               ▼
+┌────────────────────────────────────────────────────────────┐
+│ Remote Mac                                                  │
+│  1. authenticateAsc()       — uploads /tmp/AuthKey.p8       │
+│  2. setupSigning()          — asc signing fetch/sync pull   │
+│                               security import .p12 into    │
+│                               rn-deploy-build.keychain     │
+│                               asc profiles local install   │
+│  3. cloneRepo()             — git clone <repo>             │
+│  4. expo prebuild           — generates ios/                │
+│  5. pod install             — Pods/                         │
+│  6. xcodebuild archive      — build/MyApp.xcarchive        │
+│  7. xcodebuild -exportArc.  — build/export/MyApp.ipa       │
+│  8. asc builds upload       — if --auto-submit             │
+│  9. teardown                — destroys keychain + creds    │
+└────────────────────────────────────────────────────────────┘
+               │ scp
+               ▼
+┌────────────────────────────────┐
+│ Local                          │
+│  ./MyApp-<timestamp>.ipa       │
+└────────────────────────────────┘
+```
+
+## What touches your secrets
+
+| Asset | Local | In transit | On remote | After build |
+| --- | --- | --- | --- | --- |
+| ASC `.p8` | `~/.appstoreconnect/AuthKey_*.p8` (mode 600) | SSH-encrypted | `/tmp/AuthKey.p8` (mode 600) | Deleted |
+| ASC keychain entry | macOS keychain | — | `asc auth login --bypass-keychain` | Logged out |
+| `.p12` distribution cert | Not on local | — | Imported into `rn-deploy-build.keychain` | Keychain destroyed |
+| `.mobileprovision` | Not on local | — | `~/Library/MobileDevice/Provisioning Profiles/` | Stays installed (multi-build reuse) |
+| Source code | Local checkout | — | `~/build-workspace` (cleaned each build) | Cleaned |
+| `.ipa` artifact | Downloaded to local cwd | SSH-encrypted | `~/build-workspace/build/export/` | Deleted with workspace |
+
+## Why a dedicated keychain
+
+We never touch the host's `login.keychain`. The build keychain (`rn-deploy-build.keychain`) is:
+
+- Created per build
+- Unlocked for 6 hours (`-lut 21600`)
+- Added to the user's search list so `codesign` can find it
+- Destroyed in `teardownSigning()`, success or failure
+
+This means even if multiple builds run on the same host (CI persistence), they don't interfere with each other.
+
+## Why tmux
+
+`xcodebuild` builds can take 20+ minutes. SSH sessions over flaky networks (corporate VPN, cafe wifi, CI runners with idle timeouts) drop. Running the build inside a detached tmux session means:
+
+- The build keeps running if the SSH connection dies
+- `rn-deploy build --resume` reconnects to the same session
+- The full log is also `tee`'d to `/tmp/rn-deploy-build.log` for post-mortem
+
+## How EAS compatibility actually works
+
+`src/config/expo-loader.js` is the only file that knows about Expo's config shape. It:
+
+1. Discovers `eas.json` / `app.json` / `app.config.{js,ts}` in the project directory
+2. For dynamic configs, shells out to `npx --no-install expo config --type public --json` (Expo's own resolver — we don't reimplement it)
+3. Maps EAS field names to our internal shape (see [EAS compatibility](/docs/eas-compatibility))
+4. Returns a config object with the same structure as `deploy.config.json` would produce
+
+`loader.js` then layers the (optional) `deploy.config.json` overlay on top via shallow + targeted deep merges. Nothing downstream knows or cares whether the config came from EAS or from `deploy.config.json` — they're isomorphic.
+
+## Why the asc CLI
+
+The whole signing/submission story stands on the [`asc`](https://github.com/rork/asc) CLI from Rork. We use it because:
+
+- Native macOS keychain integration for ASC API keys
+- `asc signing fetch` / `asc signing sync` solve the cert-distribution problem
+- `asc profiles local install` correctly drops profiles into Xcode's expected directory
+- `asc builds upload` + `asc publish testflight` replace the old `iTMSTransporter` mess
+- It's a single-binary install (`brew install asc`)
+
+If you'd rather not depend on `asc`, the same primitives are available via raw ASC API calls + `security` commands — but it's a lot more code for the same outcome.
+
+## Contributing
+
+The codebase is plain ESM JavaScript, no transpile step. Run the CLI directly via `node bin/rn-deploy.js` from the repo root. There's no test suite yet — adding one (Vitest + mocked SSH) is a welcome contribution.

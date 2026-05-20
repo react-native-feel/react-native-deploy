@@ -1,0 +1,219 @@
+---
+title: Signing
+description: How certificates, provisioning profiles, and keychains are managed on the remote build Mac.
+icon: Key
+---
+
+This page explains the signing pipeline end-to-end: where certs/profiles come from, how they're installed on the build host, and how to share them across machines.
+
+## What gets signed, and with what
+
+For a TestFlight or App Store build you need three things on the build host:
+
+1. A **distribution certificate** — public `.cer` (or full `.p12` with private key) registered to your Apple Developer team.
+2. A **provisioning profile** — `.mobileprovision` file linking the certificate to your bundle ID.
+3. A **keychain** containing the private key for that certificate, that `codesign` can read.
+
+`rn-deploy` automates all three using the [`asc`](https://github.com/rork/asc) CLI on the remote Mac.
+
+## The signing pipeline
+
+When `rn-deploy build` runs, the signing flow is:
+
+<Steps>
+
+<Step>
+
+### Authenticate `asc` on the remote
+
+Your `.p8` key is uploaded to `/tmp/AuthKey.p8` (mode 0600), then `asc auth login --bypass-keychain --network` runs on the remote to register the credentials for this session.
+
+</Step>
+
+<Step>
+
+### Fetch signing assets
+
+If `signing.syncRepo` is set, `asc signing sync pull --repo … --output-dir /tmp/rn-deploy-signing` runs. Otherwise:
+
+```bash
+asc signing fetch \
+  --bundle-id com.example.app \
+  --profile-type IOS_APP_STORE \
+  --output /tmp/rn-deploy-signing \
+  --create-missing
+```
+
+This writes whatever asc can produce: a `.p12` if available, otherwise a `.cer`, plus a `.mobileprovision`.
+
+</Step>
+
+<Step>
+
+### Create a dedicated keychain
+
+To avoid touching the host's `login.keychain`:
+
+```bash
+security create-keychain -p "rn-deploy" rn-deploy-build.keychain
+security set-keychain-settings -lut 21600 rn-deploy-build.keychain
+security unlock-keychain -p "rn-deploy" rn-deploy-build.keychain
+security list-keychains -d user -s rn-deploy-build.keychain login.keychain-db
+```
+
+</Step>
+
+<Step>
+
+### Import the certificate
+
+```bash
+security import /tmp/rn-deploy-signing/cert.p12 \
+  -k rn-deploy-build.keychain \
+  -P "$ASC_P12_PASSWORD" \
+  -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/productsign
+
+security set-key-partition-list \
+  -S apple-tool:,apple: -s -k "rn-deploy" \
+  rn-deploy-build.keychain
+```
+
+</Step>
+
+<Step>
+
+### Install the provisioning profile
+
+```bash
+asc profiles local install --path /tmp/rn-deploy-signing/profile.mobileprovision
+```
+
+This drops the profile into `~/Library/MobileDevice/Provisioning Profiles/` with the canonical UUID-based filename Xcode expects.
+
+</Step>
+
+<Step>
+
+### Generate ExportOptions.plist
+
+`rn-deploy` writes an `ExportOptions.plist` to the build workspace using the team ID and profile UUID extracted from the previous step:
+
+```xml
+<dict>
+  <key>method</key><string>app-store</string>
+  <key>signingStyle</key><string>manual</string>
+  <key>teamID</key><string>ABCD1234XY</string>
+  <key>provisioningProfiles</key>
+  <dict>
+    <key>com.example.app</key>
+    <string>aabbccdd-eeff-0011-2233-445566778899</string>
+  </dict>
+</dict>
+```
+
+</Step>
+
+<Step>
+
+### Build with the dedicated keychain
+
+`OTHER_CODE_SIGN_FLAGS=--keychain rn-deploy-build.keychain` is exported, so `codesign` looks in our keychain — never the host's `login.keychain`.
+
+</Step>
+
+<Step>
+
+### Teardown
+
+After the build (success or failure), the keychain is deleted and the asc credentials are logged out:
+
+```bash
+security delete-keychain rn-deploy-build.keychain
+asc auth logout --name rn-deploy
+rm -rf /tmp/rn-deploy-signing /tmp/AuthKey.p8
+```
+
+</Step>
+
+</Steps>
+
+## The private-key problem
+
+This is the single most important constraint to understand:
+
+<Callout type="warn">
+**App Store Connect's API does not return the private key for an existing certificate.** Private keys only exist on the machine that generated the original CSR. If you let `asc certificates create` mint a cert on the build host, the private key stays there.
+</Callout>
+
+That gives you two practical strategies:
+
+### Strategy A — `--create-missing` (default, single-host)
+
+Lets `asc signing fetch --create-missing` create a fresh certificate (and matching profile) on the build host when none is reachable. The cert + key live on that host.
+
+**Pros:** Zero setup.
+**Cons:** Each new ephemeral build host creates *another* certificate. Apple limits you to 2 distribution certs per team — you'll hit the wall quickly with EC2 Mac fresh boots.
+
+### Strategy B — `signing.syncRepo` (recommended for shared/CI)
+
+Pre-stage your `.p12` + `.mobileprovision` in an encrypted git repo (fastlane-match-style). `rn-deploy` pulls + decrypts them onto every build host.
+
+```bash
+# One time, on a machine that already has the .p12 + profile:
+asc signing sync push \
+  --bundle-id com.example.app \
+  --profile-type IOS_APP_STORE \
+  --repo git@github.com:org/certs.git
+```
+
+```json title="deploy.config.json"
+{
+  "signing": {
+    "syncRepo": "git@github.com:org/certs.git"
+  }
+}
+```
+
+**Pros:** Same signing identity across every build host. Works with custom AMIs, MacinCloud, GitHub Actions, etc.
+**Cons:** One-time setup; you need somewhere to host the encrypted repo and a deploy key that the build Mac can authenticate with.
+
+See the [signing sync guide](/docs/guides/signing-sync) for the full setup.
+
+## P12 password handling
+
+`security import` requires the `.p12` password. `rn-deploy` resolves it from, in order:
+
+1. `signing.p12Password` in `deploy.config.json` (avoid — repo-readable)
+2. `ASC_P12_PASSWORD` environment variable (recommended for CI)
+3. Empty string (only valid for password-less p12s — discouraged)
+
+```bash
+ASC_P12_PASSWORD="$(security find-generic-password -s rn-deploy-p12 -w)" \
+  rn-deploy build --profile production
+```
+
+## Sanity checks
+
+After a build, you can verify the signing identity in the log:
+
+```text
+✔ Signing ready: team=ABCD1234XY profile=match AppStore com.example.app bundle=com.example.app
+```
+
+If teamId is empty or the profile name is `?`, `asc signing fetch` likely returned only a `.cer` (no private key). Switch to `signing.syncRepo` or generate the cert from a CSR you have access to.
+
+## Multiple bundle IDs
+
+`rn-deploy` currently signs **one bundle ID per build profile**. If your app has app extensions (share extension, widget, watch app), each needs its own provisioning profile — register them in App Store Connect under the same team and `asc signing fetch --create-missing` will pick them up; otherwise prepend them via `asc signing sync push` for each bundle ID.
+
+Multi-bundle automated signing is a planned enhancement.
+
+## Why a dedicated keychain?
+
+Three reasons:
+
+1. **Isolation** — never modifies `login.keychain`; can't leak across builds.
+2. **Predictability** — `codesign` finds exactly one identity, with no ambiguity.
+3. **Cleanup** — `security delete-keychain` wipes everything in one call.
+
+The keychain is unlocked for 6 hours (`-lut 21600`) — long enough for any reasonable build, short enough to fail closed if a build hangs.

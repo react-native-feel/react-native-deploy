@@ -1,0 +1,162 @@
+---
+title: CI/CD integration
+description: Patterns for running rn-deploy from GitHub Actions, GitLab CI, and other CI systems.
+---
+
+`rn-deploy` is designed to run unattended. This guide covers the bits that always trip up first-time CI integrations.
+
+## Decision: where does the build run?
+
+You have three placements for the actual build:
+
+<Cards>
+  <Card title="CI macOS runner builds locally" description="GitHub Actions macos-14, etc. — rn-deploy connects to localhost." />
+  <Card title="CI dispatches to a long-lived Mac" description="MacinCloud or your own colo. CI just SSHes in via rn-deploy." />
+  <Card title="CI provisions EC2 Mac on demand" description="rn-deploy infra up + build + down inside the job. Watch the 24h minimum." />
+</Cards>
+
+The first two are the common cases.
+
+## Required secrets
+
+Whichever you pick, your CI needs these secrets:
+
+| Secret | What | How to provide |
+| --- | --- | --- |
+| `ASC_KEY_ID` | App Store Connect API key ID | CI secret |
+| `ASC_ISSUER_ID` | ASC issuer UUID | CI secret |
+| `ASC_KEY_BASE64` | Base64-encoded `.p8` contents | CI secret (`base64 < AuthKey.p8`) |
+| `ASC_P12_PASSWORD` | Password for the distribution `.p12` | CI secret |
+| `SIGNING_SYNC_PASSPHRASE` | Decryption passphrase for `asc signing sync` repo | CI secret |
+| `SIGNING_SYNC_DEPLOY_KEY` | SSH private key with read access to signing repo | CI secret |
+| `BUILD_HOST_SSH_KEY` | SSH key for the remote build Mac (if not building on the CI runner) | CI secret |
+
+## GitHub Actions — full example
+
+This builds on a macos-14 runner, fetches signing from a sync repo, ships to TestFlight on every push to `main`:
+
+```yaml title=".github/workflows/ios-release.yml"
+name: iOS release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install asc + rn-deploy
+        run: |
+          brew install asc
+          npm i -g rn-deploy
+
+      - name: Materialize ASC private key
+        env:
+          ASC_KEY_BASE64: ${{ secrets.ASC_KEY_BASE64 }}
+        run: |
+          mkdir -p "$HOME/.appstoreconnect"
+          echo "$ASC_KEY_BASE64" | base64 -d > "$HOME/.appstoreconnect/AuthKey.p8"
+          chmod 600 "$HOME/.appstoreconnect/AuthKey.p8"
+
+      - name: Configure signing sync SSH access
+        env:
+          DEPLOY_KEY: ${{ secrets.SIGNING_SYNC_DEPLOY_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$DEPLOY_KEY" > ~/.ssh/signing_sync
+          chmod 600 ~/.ssh/signing_sync
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          cat >> ~/.ssh/config <<'EOF'
+          Host github.com
+            IdentityFile ~/.ssh/signing_sync
+            IdentitiesOnly yes
+          EOF
+
+      - name: Build + submit
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY_PATH: ${{ runner.temp }}/AuthKey.p8
+          ASC_P12_PASSWORD: ${{ secrets.ASC_P12_PASSWORD }}
+          ASC_SYNC_PASSPHRASE: ${{ secrets.SIGNING_SYNC_PASSPHRASE }}
+        run: |
+          cp "$HOME/.appstoreconnect/AuthKey.p8" "$ASC_PRIVATE_KEY_PATH"
+          rn-deploy build \
+            --profile production \
+            --auto-submit \
+            --non-interactive \
+            --host 127.0.0.1 \
+            --message "${{ github.event.head_commit.message }}"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ipa
+          path: '*.ipa'
+          if-no-files-found: ignore
+```
+
+## Building on a dispatched Mac (CI is just a controller)
+
+If your CI runs on Linux but you SSH out to a Mac (e.g. MacinCloud), the CI runner needs:
+
+- SSH access to the build Mac (deploy key on the Mac, private key in CI)
+- ASC + signing repo SSH keys to be **pre-installed on the build Mac**, not the CI runner
+
+```yaml
+- name: Trigger remote build
+  env:
+    ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+    ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+    ASC_PRIVATE_KEY_PATH: /tmp/AuthKey.p8
+    BUILD_HOST: build-mac.example.com
+  run: |
+    echo "${{ secrets.ASC_KEY_BASE64 }}" | base64 -d > /tmp/AuthKey.p8
+    chmod 600 /tmp/AuthKey.p8
+    rn-deploy build \
+      --profile production \
+      --auto-submit \
+      --non-interactive \
+      --host "$BUILD_HOST"
+```
+
+## Caching tips
+
+**Node modules:** standard `actions/setup-node` cache works.
+
+**CocoaPods:** cache `ios/Pods` keyed on `Podfile.lock` hash. `rn-deploy` runs `pod install` unconditionally so the cache is just a download accelerator.
+
+**Custom AMI (EC2 Mac):** Save time by baking Node + CocoaPods + Homebrew into a custom AMI. After a successful build:
+
+```bash
+rn-deploy infra ami-list
+# Note the ID, then set in deploy.config.json:
+# "aws": { "customAmiId": "ami-0abcd1234" }
+```
+
+Subsequent builds skip the 5-10 minute provisioning step.
+
+## Don't do this
+
+<Callout type="warn">
+**Don't `--auto-submit` on every commit** — TestFlight rejects builds with identical version+build numbers. Either bump `expo.ios.buildNumber` in `app.json` per build, or use a versioning script in your prebuild hook.
+</Callout>
+
+<Callout type="warn">
+**Don't commit `.p8` files or `.p12` files.** They go through your CI's secret store. The repo should be safe to clone publicly (modulo your source code).
+</Callout>
+
+## See also
+
+- [Credentials → CI patterns](/docs/credentials#ci--unattended-environments)
+- [Signing sync](/docs/guides/signing-sync)
+- [Troubleshooting](/docs/guides/troubleshooting)

@@ -1,0 +1,96 @@
+---
+title: submit
+description: Standalone TestFlight submission for an existing .ipa.
+---
+
+```bash
+rn-deploy submit [options]
+```
+
+Uploads an existing `.ipa` to App Store Connect and assigns it to TestFlight groups. Use this when:
+
+- You built outside `rn-deploy build` (e.g. with Xcode locally) and just want the upload step
+- You want to re-submit an `.ipa` that's already on the remote Mac
+- The previous `--auto-submit` failed and you want to retry without rebuilding
+
+## Flags
+
+| Flag | Description |
+| --- | --- |
+| `--ipa <path>` | Path to the `.ipa` — local path (uploaded to remote) or a path already on the remote |
+| `--profile <name>` | Submit profile (default `production`) |
+| `--groups <names>` | Comma-separated TestFlight group names; overrides `submit.<profile>.testFlightGroups` |
+| `--what-to-test <text>` | Release notes |
+| `--message <text>` | Alias for `--what-to-test` |
+
+## How it works
+
+<Steps>
+
+<Step>
+
+### Requires a running remote Mac
+
+`asc builds upload` runs on the remote (not your laptop). If you don't have an active instance, run `rn-deploy infra up` first.
+
+</Step>
+
+<Step>
+
+### Upload `.ipa` if needed
+
+If `--ipa` is a local path, it's `scp`'d to `/tmp/upload.ipa` on the remote.
+
+</Step>
+
+<Step>
+
+### Authenticate ASC on the remote
+
+Same as `build`: `.p8` is uploaded, `asc auth login --bypass-keychain` runs for this session.
+
+</Step>
+
+<Step>
+
+### Look up the App Store Connect app
+
+If `submit.<profile>.ascAppId` is set in config (or copied from `eas.json` `submit.ios.ascAppId`), it's used directly. Otherwise `asc apps list --output json` returns the list and the first match is used (with a warning if more than one exists).
+
+</Step>
+
+<Step>
+
+### Upload + distribute
+
+```bash
+asc builds upload --app <appId> --ipa /path/to/MyApp.ipa
+asc publish testflight --group "Internal Testers" --wait
+```
+
+`--wait` polls until ASC finishes processing the build (typically 5-15 minutes).
+
+</Step>
+
+</Steps>
+
+## Examples
+
+```bash
+# Submit a local .ipa
+rn-deploy submit --ipa ./MyApp-1.0.0.ipa --profile production
+
+# Submit something already on the remote (skips upload)
+rn-deploy submit --ipa /Users/ec2-user/build-workspace/build/export/MyApp.ipa
+
+# Override groups
+rn-deploy submit --ipa ./MyApp.ipa --groups "Beta,Internal Testers"
+
+# Add release notes
+rn-deploy submit --ipa ./MyApp.ipa --what-to-test "Fixes #1234. Improves cold start by 30%."
+```
+
+## See also
+
+- [`build --auto-submit`](/docs/commands/build) — chain build + submit in one command
+- [EAS compatibility — submit profiles](/docs/eas-compatibility#submit-profiles)

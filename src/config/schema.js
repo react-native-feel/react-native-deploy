@@ -5,9 +5,6 @@ const REQUIRED_FIELDS = {
   'aws.securityGroupName': 'string',
   'aws.nodeVersion': 'string',
   'aws.xcodeVersion': 'string',
-  'asc.keyId': 'string',
-  'asc.issuerId': 'string',
-  'asc.privateKeyPath': 'string',
   'repo.url': 'string',
   'repo.branch': 'string',
 };
@@ -30,6 +27,9 @@ export function validateConfig(config) {
       errors.push(`${path} must be a ${type}, got ${typeof value}`);
     }
   }
+
+  // asc credentials are no longer required in config — they live in macOS keychain
+  // via "rn-deploy credentials configure". We only validate them at build/submit time.
 
   if (config.build) {
     for (const [profileName, profile] of Object.entries(config.build)) {

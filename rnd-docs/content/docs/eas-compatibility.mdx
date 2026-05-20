@@ -1,0 +1,266 @@
+---
+title: EAS compatibility
+description: How rn-deploy maps eas.json and app.json into its build/submit pipeline, what's supported, and what's not.
+icon: GitCompare
+---
+
+`rn-deploy` is designed so that the **same project files that drive EAS Build also drive `rn-deploy`**. You should be able to point it at an existing Expo project with `eas.json` + `app.json` and have it Just Work.
+
+This page is the source of truth for what's mapped and what isn't.
+
+## Config loading order
+
+When you run `rn-deploy build`, configuration is resolved as follows:
+
+<Steps>
+
+<Step>
+
+### Discover the project
+
+`rn-deploy` looks in the current directory for, in order: `eas.json`, `app.json`, `app.config.ts`, `app.config.js`, `deploy.config.json`.
+
+</Step>
+
+<Step>
+
+### Load Expo config
+
+If any of `eas.json`, `app.json`, or `app.config.{js,ts}` is present, the **expo-loader** kicks in:
+
+- `eas.json` → build/submit profiles
+- `app.json` (or `npx expo config --type public --json` for `app.config.{js,ts}`) → bundle ID, app name, default scheme
+
+</Step>
+
+<Step>
+
+### Overlay `deploy.config.json`
+
+If `deploy.config.json` also exists, it deep-merges on top — anything it sets wins. This is where you put things EAS doesn't model (AWS region, custom AMI, signing sync repo).
+
+</Step>
+
+<Step>
+
+### Apply CLI flags
+
+`--repo`, `--branch`, `--scheme`, `--build-type`, `--region`, etc. override anything from config files.
+
+</Step>
+
+</Steps>
+
+## `eas.json` → rn-deploy mapping
+
+### Build profiles
+
+| `eas.json` field | rn-deploy field | Notes |
+| --- | --- | --- |
+| `build.<profile>` | `build.<profile>` | Profile names preserved verbatim |
+| `build.<profile>.extends` | `build.<profile>.extends` | Inheritance chain works the same way |
+| `build.<profile>.distribution` | `build.<profile>.distribution` + `.profileType` | See [distribution mapping](#distribution--profile-type) |
+| `build.<profile>.ios.scheme` | `build.<profile>.scheme` | Falls back to `app.json`'s `expo.name` (sanitized) |
+| `build.<profile>.ios.buildConfiguration` | `build.<profile>.buildConfiguration` | `Debug` or `Release` |
+| `build.<profile>.env` | `build.<profile>.env` | Exported into the remote shell before `xcodebuild` |
+| `build.<profile>.developmentClient` | `buildConfiguration: "Debug"` (implied) | |
+| `build.<profile>.simulator` | `buildConfiguration: "Debug"` (implied) | |
+| `build.<profile>.ios.image` | — | Not applicable — you control the host |
+| `build.<profile>.ios.resourceClass` | — | Not applicable — you control the host |
+| `build.<profile>.ios.cocoapods` | — | We always run `pod install`; CocoaPods version is from your Gemfile/Brewfile |
+| `build.<profile>.cache` | — | Not yet wired through (planned) |
+| `build.<profile>.channel` | — | EAS Update concept; doesn't apply |
+
+### Distribution → profile type
+
+`rn-deploy` translates EAS `distribution` into an App Store Connect `profileType` for `asc signing fetch`:
+
+| `eas.json` `distribution` | `asc` `profileType` |
+| --- | --- |
+| `store`, `app-store`, `production` | `IOS_APP_STORE` |
+| `internal`, `ad-hoc`, `adhoc` | `IOS_AD_HOC` |
+| `enterprise` | `IOS_IN_HOUSE` |
+| `development`, `simulator` | `IOS_APP_DEVELOPMENT` |
+
+### Submit profiles
+
+| `eas.json` field | rn-deploy field | Notes |
+| --- | --- | --- |
+| `submit.<profile>.ios.ascAppId` | `submit.<profile>.ascAppId` | Skips an `asc apps list` lookup if set |
+| `submit.<profile>.ios.appleId` | — | Not used; we auth via API key |
+| `submit.<profile>.ios.groups` | `submit.<profile>.testFlightGroups` | Array of TestFlight group names |
+| `submit.<profile>.ios.ascApiKeyPath` | resolved via [credentials chain](/docs/credentials) | Keychain takes precedence |
+| `submit.<profile>.ios.ascApiKeyId` | resolved via [credentials chain](/docs/credentials) | |
+| `submit.<profile>.ios.ascApiIssuerId` | resolved via [credentials chain](/docs/credentials) | |
+| `submit.<profile>.ios.bundleIdentifier` | derived from `app.json` `ios.bundleIdentifier` | |
+| `submit.<profile>.ios.companyName` | — | EAS App Store Connect first-time-availability concept; not yet wired |
+| `submit.<profile>.ios.sku` | — | Not used |
+
+## `app.json` → rn-deploy mapping
+
+We read the resolved Expo config (`expo` key of `app.json` or output of `expo config --type public --json` for dynamic configs):
+
+| Expo config | rn-deploy uses it for |
+| --- | --- |
+| `expo.name` | Default Xcode scheme (sanitized to alphanumeric + `_-`) |
+| `expo.slug` | Fallback scheme if `name` is absent |
+| `expo.ios.bundleIdentifier` | `signing.bundleId` — drives `asc signing fetch` |
+| `expo.ios.buildNumber` | Read for context; you still need `expo prebuild` to embed it |
+| `expo.version` | Read for context |
+
+## What does NOT carry over
+
+These are EAS-specific concepts that don't apply (or that we haven't built yet):
+
+<Accordions type="single">
+
+<Accordion title="EAS Update / channels">
+`channel`, `runtimeVersion` and the EAS Update OTA service aren't part of `rn-deploy`. If you want OTA updates you can continue using `expo-updates` against a self-hosted update server.
+</Accordion>
+
+<Accordion title="Cloud-resource-class selection (medium/large/m-medium)">
+You pick the host; there's no `resourceClass` to select. Use whatever Mac you're SSH'd into.
+</Accordion>
+
+<Accordion title="EAS Workflows / orchestration">
+EAS Workflows is a separate product; `rn-deploy` is just a build/submit CLI. Wire it into your own CI (GitHub Actions, Buildkite, etc.).
+</Accordion>
+
+<Accordion title="EAS Secrets">
+`rn-deploy` reads env vars from `eas.json`'s `build.<profile>.env` and from your shell. There's no encrypted server-side secrets store. Use your CI's secret manager.
+</Accordion>
+
+<Accordion title="EAS Credentials (server-managed signing)">
+We use [`asc signing sync`](/docs/guides/signing-sync) (encrypted git repo) for the same outcome — see the [signing guide](/docs/signing).
+</Accordion>
+
+<Accordion title="Android builds">
+This release is iOS-only. Android builds (Gradle / signing config / Play Console upload) are planned.
+</Accordion>
+
+</Accordions>
+
+## Migration cheatsheet
+
+Coming from EAS, this is what changes in your day-to-day:
+
+<Tabs items={["Build", "Submit", "Credentials", "Config"]}>
+
+```bash tab="Build"
+# Before
+eas build --platform ios --profile production
+# After
+rn-deploy build --profile production
+```
+
+```bash tab="Submit"
+# Before
+eas submit --platform ios --latest
+# After (chains to build)
+rn-deploy build --profile production --auto-submit
+# After (standalone)
+rn-deploy submit --ipa ./MyApp.ipa --profile production
+```
+
+```bash tab="Credentials"
+# Before
+eas credentials
+# After
+rn-deploy credentials configure
+rn-deploy credentials status
+```
+
+```bash tab="Config"
+# eas.json stays as-is.
+# Add an optional deploy.config.json overlay for host-specific stuff:
+# {
+#   "aws": { "region": "us-east-1" },
+#   "signing": { "syncRepo": "git@github.com:org/certs.git" }
+# }
+```
+
+</Tabs>
+
+## Worked example
+
+A real-world `eas.json`:
+
+```json title="eas.json"
+{
+  "cli": { "version": ">= 5.0.0" },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": { "simulator": false }
+    },
+    "preview": {
+      "distribution": "internal",
+      "ios": { "buildConfiguration": "Release" }
+    },
+    "production": {
+      "ios": {
+        "buildConfiguration": "Release",
+        "autoIncrement": true
+      },
+      "env": { "API_URL": "https://api.example.com" }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "ascAppId": "1234567890",
+        "groups": ["Internal Testers", "QA"]
+      }
+    }
+  }
+}
+```
+
+Becomes the following internal config (you don't write this — just useful to see):
+
+```json title="resolved by rn-deploy"
+{
+  "build": {
+    "development": {
+      "buildType": "expo",
+      "scheme": "MyApp",
+      "buildConfiguration": "Debug",
+      "distribution": "internal",
+      "profileType": "IOS_AD_HOC"
+    },
+    "preview": {
+      "buildType": "expo",
+      "scheme": "MyApp",
+      "buildConfiguration": "Release",
+      "distribution": "internal",
+      "profileType": "IOS_AD_HOC"
+    },
+    "production": {
+      "buildType": "expo",
+      "scheme": "MyApp",
+      "buildConfiguration": "Release",
+      "distribution": "app-store",
+      "profileType": "IOS_APP_STORE",
+      "env": { "API_URL": "https://api.example.com" }
+    }
+  },
+  "submit": {
+    "production": {
+      "ascAppId": "1234567890",
+      "testFlightGroups": ["Internal Testers", "QA"]
+    }
+  },
+  "signing": { "bundleId": "<from app.json>", "profileType": "IOS_APP_STORE" }
+}
+```
+
+## Caveats to know up front
+
+<Callout type="warn">
+`asc signing fetch` cannot download the **private key** for an existing distribution certificate (ASC API limitation — private keys only exist where the original CSR was generated). For an unattended build you have two options: let `--create-missing` mint a fresh cert on the build host (leaks certs over time), or use [`asc signing sync`](/docs/guides/signing-sync) with an encrypted git repo. The signing guide covers both.
+</Callout>
+
+<Callout type="warn">
+`autoIncrement` / `buildNumber` bumping is handled by your project (via `expo prebuild` or your own pre-build script). `rn-deploy` does not yet auto-bump versions like EAS does.
+</Callout>

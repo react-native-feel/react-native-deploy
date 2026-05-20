@@ -4,7 +4,14 @@ import { loadState } from '../infra/state.js';
 import { infraUp, infraDown } from './infra.js';
 import { createSshConnection, sshExec } from '../remote/ssh.js';
 import { provisionInstance, cloneRepo } from '../remote/provision.js';
-import { setupSigning, fetchSigningAssets, generateExportOptionsPlist } from '../remote/signing.js';
+import {
+  authenticateAsc,
+  setupSigning,
+  teardownSigning,
+  cleanupAscCredentials,
+  generateExportOptionsPlist,
+} from '../remote/signing.js';
+import { resolveAscCredentials } from '../config/credentials.js';
 import { getExpoBuildSteps } from '../build/expo.js';
 import { getClassicBuildSteps } from '../build/classic.js';
 import { findAndDownloadIpa } from '../build/artifacts.js';
@@ -84,23 +91,41 @@ export async function buildCommand(options = {}) {
       logger.step(3, 6, 'Using custom AMI — skipping provisioning');
     }
 
-    // Setup signing and extract real values
-    await setupSigning(ssh, config.asc);
-    const signingInfo = await fetchSigningAssets(ssh);
+    // Resolve ASC credentials locally (keychain > env > config) and authenticate on remote
+    const ascCreds = resolveAscCredentials(config);
+    logger.debug(`ASC credentials source: ${ascCreds.source}`);
+    await authenticateAsc(ssh, ascCreds);
+
+    // Fetch + install signing assets on remote (this is what was missing before)
+    const distribution = profile.distribution || 'app-store';
+    const signingInfo = await setupSigning(ssh, {
+      bundleId: config.signing?.bundleId || profile.bundleId,
+      profileType: profile.profileType || config.signing?.profileType,
+      distribution,
+      syncRepo: config.signing?.syncRepo,
+      p12Password: config.signing?.p12Password,
+      createMissing: config.signing?.createMissing !== false,
+    });
 
     // Clone repo
     const workDir = await cloneRepo(ssh, config.repo.url, config.repo.branch);
 
     // Generate ExportOptions.plist on remote using real signing values
-    const distribution = profile.distribution || 'app-store';
     const method = distribution === 'ad-hoc' ? 'ad-hoc' : 'app-store';
     const plistContent = generateExportOptionsPlist({
       method,
       teamId: signingInfo.teamId,
       bundleId: signingInfo.bundleId,
       profileName: signingInfo.profileName,
+      profileUuid: signingInfo.profileUuid,
     });
     await sshExec(ssh, `cat > ${workDir}/ExportOptions.plist << 'PLIST_EOF'\n${plistContent}\nPLIST_EOF`);
+
+    // Make build keychain available to xcodebuild (it inherits PATH/env from the tmux shell)
+    profile.env = {
+      ...(profile.env || {}),
+      OTHER_CODE_SIGN_FLAGS: `--keychain ${signingInfo.keychain}`,
+    };
 
     // Step 4: Build inside tmux session for resilience
     logger.step(4, 6, 'Building app');
@@ -165,6 +190,9 @@ export async function buildCommand(options = {}) {
       }
     }
   } finally {
+    // Best-effort cleanup of remote signing state and asc creds
+    try { await teardownSigning(ssh); } catch { /* ignore */ }
+    try { await cleanupAscCredentials(ssh); } catch { /* ignore */ }
     ssh.dispose();
   }
 
@@ -176,7 +204,7 @@ export async function buildCommand(options = {}) {
   }
 }
 
-async function resumeBuild(options) {
+async function resumeBuild(_options) {
   const state = loadState();
   if (!state) {
     throw new Error('No active instance found. Cannot resume.');

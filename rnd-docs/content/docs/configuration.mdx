@@ -1,0 +1,220 @@
+---
+title: Configuration
+description: How rn-deploy resolves configuration from eas.json, app.json, deploy.config.json, environment variables, and CLI flags.
+icon: Settings
+---
+
+## Where config comes from
+
+`rn-deploy` reads config from four layers, applied in this order (later wins):
+
+<Steps>
+
+<Step>
+
+### Expo project files (auto-discovered)
+
+`eas.json` and `app.json` / `app.config.{js,ts}` in the project directory. See [EAS compatibility](/docs/eas-compatibility) for the full mapping.
+
+</Step>
+
+<Step>
+
+### `deploy.config.json` overlay (optional)
+
+A repo-local JSON file that overrides anything Expo doesn't model and adds host/signing/repo settings.
+
+</Step>
+
+<Step>
+
+### Environment variables
+
+Used for secrets you can't put in the repo:
+
+- `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_PRIVATE_KEY_PATH` — App Store Connect API key fallback
+- `ASC_P12_PASSWORD` — password for the `.p12` imported into the build keychain
+- `AWS_*` — standard AWS SDK env vars (when using the EC2 Mac provisioner)
+
+</Step>
+
+<Step>
+
+### CLI flags
+
+Highest precedence. See [command reference](/docs/commands) for available flags.
+
+</Step>
+
+</Steps>
+
+## `deploy.config.json` reference
+
+A complete overlay with every supported field:
+
+```json title="deploy.config.json"
+{
+  "cli": {
+    "version": "1.0.0"
+  },
+  "aws": {
+    "region": "us-east-1",
+    "instanceType": "mac2.metal",
+    "keyPairName": "rn-deploy-key",
+    "securityGroupName": "rn-deploy-sg",
+    "customAmiId": null,
+    "nodeVersion": "20",
+    "xcodeVersion": "16"
+  },
+  "signing": {
+    "bundleId": "com.example.app",
+    "profileType": "IOS_APP_STORE",
+    "createMissing": true,
+    "syncRepo": "git@github.com:org/certs.git",
+    "p12Password": null
+  },
+  "repo": {
+    "url": "git@github.com:org/myapp.git",
+    "branch": "main"
+  },
+  "build": {
+    "production": {
+      "buildType": "expo",
+      "scheme": "MyApp",
+      "buildConfiguration": "Release",
+      "distribution": "app-store",
+      "env": {}
+    },
+    "preview": {
+      "extends": "production",
+      "distribution": "ad-hoc"
+    }
+  },
+  "submit": {
+    "production": {
+      "ascAppId": "1234567890",
+      "testFlightGroups": ["Internal Testers"],
+      "whatToTest": "Bug fixes."
+    }
+  }
+}
+```
+
+### `aws`
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `region` | string | `us-east-1` | AWS region for EC2 Mac provisioning |
+| `instanceType` | string | `mac2.metal` | EC2 instance type |
+| `keyPairName` | string | `rn-deploy-key` | EC2 SSH key pair name (auto-created if missing) |
+| `securityGroupName` | string | `rn-deploy-sg` | Security group (auto-created, locked to your IP) |
+| `customAmiId` | string\|null | `null` | If set, skips provisioning steps and boots from this AMI |
+| `nodeVersion` | string | `20` | Node version installed via Homebrew |
+| `xcodeVersion` | string | `16` | Xcode major version expected on the host |
+
+<Callout type="info">
+If you're using MacinCloud, a local Mac, or your own infra, the `aws` block is irrelevant — `rn-deploy build` connects to a host you provide via SSH instead.
+</Callout>
+
+### `signing`
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `bundleId` | string | from `app.json` `ios.bundleIdentifier` | Bundle identifier passed to `asc signing fetch` |
+| `profileType` | string | derived from per-profile `distribution` | One of `IOS_APP_STORE`, `IOS_AD_HOC`, `IOS_IN_HOUSE`, `IOS_APP_DEVELOPMENT` |
+| `createMissing` | bool | `true` | Pass `--create-missing` to `asc signing fetch` |
+| `syncRepo` | string\|null | `null` | When set, uses `asc signing sync pull` instead of `asc signing fetch` (recommended for shared private keys) |
+| `p12Password` | string\|null | `null` | Password for the `.p12` import; usually safer to use `ASC_P12_PASSWORD` env var |
+
+### `repo`
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `url` | — | Git URL the **remote Mac** clones from. The remote must have read access (deploy key or HTTPS token) |
+| `branch` | `main` | Branch to build |
+
+### `build.<profile>`
+
+Per-profile build settings. Most projects will let `eas.json` populate this and only override here when needed.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `extends` | string | Inherit from another profile name |
+| `buildType` | `"expo"` \| `"classic"` | `expo` runs `expo prebuild`; `classic` skips it |
+| `scheme` | string | Xcode scheme name |
+| `buildConfiguration` | `"Debug"` \| `"Release"` | Xcode configuration |
+| `distribution` | string | `app-store`, `ad-hoc`, `enterprise`, `development` |
+| `profileType` | string | Explicit override; otherwise derived from `distribution` |
+| `env` | object | Env vars exported in the remote shell before `xcodebuild` |
+| `bundleId` | string | Per-profile override (rare; usually one app = one bundle) |
+
+### `submit.<profile>`
+
+| Field | Description |
+| --- | --- |
+| `ascAppId` | App Store Connect numeric app ID. If absent we look it up with `asc apps list`. |
+| `testFlightGroups` | Array of TestFlight group names to assign |
+| `whatToTest` | Release notes; can be overridden per-build with `--message` |
+
+## Precedence rules
+
+When the same value appears in multiple layers:
+
+| Setting | Resolved from (highest priority first) |
+| --- | --- |
+| App bundle ID | `signing.bundleId` (overlay) → `app.json` `ios.bundleIdentifier` |
+| Build scheme | `--scheme` flag → `build.<profile>.scheme` (overlay) → `eas.json` `ios.scheme` → `app.json` `expo.name` |
+| Build configuration | `build.<profile>.buildConfiguration` (overlay) → `eas.json` `ios.buildConfiguration` |
+| TestFlight groups | `--groups` flag → `submit.<profile>.testFlightGroups` (overlay) → `eas.json` `submit.ios.groups` |
+| ASC API key | `config.asc` (legacy) → `ASC_KEY_ID`/`ASC_ISSUER_ID` env → asc keychain |
+
+## Minimal configs
+
+<Tabs items={["Expo only", "Expo + overlay", "Non-Expo"]}>
+
+```text tab="Expo only"
+# No deploy.config.json needed.
+# rn-deploy reads eas.json + app.json automatically.
+your-project/
+  app.json
+  eas.json
+  package.json
+```
+
+```json tab="Expo + overlay"
+// deploy.config.json (only fields not in eas.json/app.json)
+{
+  "aws": { "region": "us-west-2" },
+  "signing": { "syncRepo": "git@github.com:org/certs.git" },
+  "repo": { "url": "git@github.com:org/myapp.git", "branch": "main" }
+}
+```
+
+```json tab="Non-Expo"
+// deploy.config.json (full config — no eas.json/app.json fallback)
+{
+  "aws": { "region": "us-east-1", "instanceType": "mac2.metal", "keyPairName": "rn-deploy-key", "securityGroupName": "rn-deploy-sg", "nodeVersion": "20", "xcodeVersion": "16" },
+  "signing": { "bundleId": "com.example.app" },
+  "repo": { "url": "git@github.com:org/myapp.git", "branch": "main" },
+  "build": {
+    "production": { "buildType": "classic", "scheme": "MyApp", "buildConfiguration": "Release", "distribution": "app-store" }
+  },
+  "submit": {
+    "production": { "ascAppId": "1234567890", "testFlightGroups": ["Internal Testers"] }
+  }
+}
+```
+
+</Tabs>
+
+## Validation
+
+`rn-deploy build` validates config before doing anything expensive (provisioning, SSH, signing fetch). On failure you'll see something like:
+
+```text
+Config validation failed:
+  - Missing required field: repo.url
+  - build.production.buildType must be one of: expo, classic
+```
+
+These are local-only checks; deeper errors (e.g. wrong bundle ID, no cert in ASC) surface during the build.

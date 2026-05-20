@@ -1,0 +1,10 @@
+{
+  "title": "Guides",
+  "pages": [
+    "signing-sync",
+    "macincloud",
+    "ci-cd",
+    "architecture",
+    "troubleshooting"
+  ]
+}

@@ -1,0 +1,146 @@
+---
+title: Getting started
+description: Install rn-deploy, configure your App Store Connect credentials, and run your first build.
+icon: Play
+---
+
+## Prerequisites
+
+You'll need these on the **machine running rn-deploy** (your laptop or CI runner):
+
+| Tool | Why | Install |
+| --- | --- | --- |
+| Node.js ≥ 20 | Runs the CLI | `brew install node` |
+| `asc` | App Store Connect CLI used for auth, signing, submission | `brew install asc` |
+| `git`, `ssh` | Cloning project + connecting to the build Mac | usually preinstalled |
+| AWS CLI (optional) | Only if you use the bundled EC2 Mac provisioner | `brew install awscli` |
+
+You'll also need:
+
+- An **App Store Connect API key** (`.p8`), with **Admin** or **App Manager** access — generate one at [appstoreconnect.apple.com/access/integrations/api](https://appstoreconnect.apple.com/access/integrations/api).
+- A **Mac to build on** — see [hosting options](#hosting-options).
+
+<Callout type="info">
+`rn-deploy` does *not* require an Apple ID password. All Apple interactions go through your App Store Connect API key.
+</Callout>
+
+## Install
+
+```bash
+npm i -g rn-deploy
+```
+
+Verify:
+
+```bash
+rn-deploy --version
+```
+
+## Configure credentials
+
+This is a **one-time** step per development machine. It stores your ASC API key in the macOS keychain via `asc auth login`.
+
+```bash
+rn-deploy credentials configure
+```
+
+You'll be prompted for:
+
+- A friendly name (default: `rn-deploy`)
+- Your API **Key ID** (10 chars, e.g. `ABCD123XYZ`)
+- Your **Issuer ID** (UUID)
+- Path to the `.p8` file (default: `~/.appstoreconnect/AuthKey_<keyId>.p8`)
+
+Confirm it stuck:
+
+```bash
+rn-deploy credentials status
+```
+
+## Hosting options
+
+`rn-deploy` doesn't care *how* the Mac is reachable, only that it is. You have three integration paths:
+
+<Tabs items={["AWS EC2 Mac", "MacinCloud / colo / your Mac", "Local Mac"]}>
+
+```bash tab="AWS EC2 Mac"
+# The CLI provisions a Dedicated Host + mac2.metal instance for you
+rn-deploy infra up
+rn-deploy build --profile production
+rn-deploy infra down  # or --no-teardown on the build command
+```
+
+```bash tab="MacinCloud / colo / your Mac"
+# Pre-configure SSH access yourself, then point rn-deploy at it
+# (see Guides → MacinCloud for the managed Pay-As-You-Go flow)
+rn-deploy build --profile production --host my-mac.example.com
+```
+
+```bash tab="Local Mac"
+# Run directly with SSH to localhost
+rn-deploy build --profile production --host 127.0.0.1
+```
+
+</Tabs>
+
+## First build (Expo project)
+
+If your project already has `eas.json` + `app.json`, you're ready:
+
+```bash
+cd path/to/your-expo-project
+rn-deploy build --profile production
+```
+
+`rn-deploy` will:
+
+1. Read `eas.json` for the `production` build profile (distribution, env, scheme, buildConfiguration).
+2. Read `app.json` (or `app.config.js/ts`) for `ios.bundleIdentifier`.
+3. SSH into your Mac, install `asc`, install Xcode dependencies (Node, CocoaPods, tmux).
+4. Run `asc signing fetch --bundle-id <your-bundle> --create-missing` to pull certs + profiles.
+5. Run `expo prebuild` → `pod install` → `xcodebuild archive` → `xcodebuild -exportArchive`.
+6. Download the resulting `.ipa` to your current directory.
+
+To also push it to TestFlight in the same run:
+
+```bash
+rn-deploy build --profile production --auto-submit --message "Fix login crash"
+```
+
+## First build (non-Expo / bare RN)
+
+For a project without `eas.json`, run setup to scaffold a `deploy.config.json`:
+
+```bash
+rn-deploy setup
+```
+
+Then build:
+
+```bash
+rn-deploy build --profile production
+```
+
+## What got created
+
+After your first run you'll find:
+
+<Files>
+  <Folder name="project" defaultOpen>
+    <File name="MyApp-1.0.0.ipa" />
+    <File name="deploy.config.json (only if you ran setup)" />
+    <Folder name="~/.appstoreconnect">
+      <File name="AuthKey_ABCD123XYZ.p8" />
+    </Folder>
+  </Folder>
+</Files>
+
+Plus the asc CLI stores your keychain entry under the service name `asc:rn-deploy`.
+
+## Next
+
+<Cards>
+  <Card title="EAS compatibility" href="/docs/eas-compatibility" description="Exactly what we read from eas.json and app.json." />
+  <Card title="Configuration" href="/docs/configuration" description="deploy.config.json overlay options." />
+  <Card title="Signing" href="/docs/signing" description="Sharing signing assets across machines and CI." />
+</Cards>

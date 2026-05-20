@@ -1,0 +1,135 @@
+---
+title: Using MacinCloud
+description: Set up rn-deploy against a MacinCloud managed Pay-As-You-Go plan.
+---
+
+[MacinCloud](https://www.macincloud.com) rents Mac hardware by the hour. The "Managed Server Pay-As-You-Go" plan is the cheapest path to an always-on build Mac if you don't want to manage EC2 Mac (which has a 24h minimum billing period).
+
+This guide is specific to the **Managed Server Pay-As-You-Go** plan. Other plans (Dedicated, Build Server) work similarly but may not have the same constraints.
+
+## Constraints to know
+
+<Callout type="warn">
+**No sudo on Managed Pay-As-You-Go.** Some setup steps (e.g. Homebrew installs into `/usr/local`) won't work directly. The provisioner falls back to user-local installs.
+</Callout>
+
+<Callout type="warn">
+**SSH tunnel mode only.** MacinCloud doesn't expose direct SSH to the public internet for Pay-As-You-Go. You connect through their SSH tunnel.
+</Callout>
+
+## Setup
+
+<Steps>
+
+<Step>
+
+### Order a plan
+
+Pick "Managed Server Pay-As-You-Go" at macincloud.com. You'll get an email with:
+
+- Hostname (something like `pas-12.macincloud.com`)
+- Username
+- A temporary password
+- SSH tunnel instructions
+
+</Step>
+
+<Step>
+
+### Save credentials securely
+
+The credentials don't go in `deploy.config.json`. Stash them somewhere outside the repo — for example a sibling `aws-mac-vnc/.env` file (gitignored) where the VNC tooling already expects them.
+
+```bash title="aws-mac-vnc/.env (gitignored)"
+MAC_HOST=pas-12.macincloud.com
+MAC_USER=youruser
+MAC_PASSWORD=...
+MAC_TUNNEL_PORT=10022
+```
+
+</Step>
+
+<Step>
+
+### Verify SSH works
+
+```bash
+ssh -p 10022 youruser@pas-12.macincloud.com 'sw_vers'
+```
+
+You should see macOS version output.
+
+</Step>
+
+<Step>
+
+### Pre-install asc on the host
+
+The remote provisioner installs `asc` automatically via Homebrew, but on the no-sudo Managed plan it goes into your user prefix. Pre-install it once:
+
+```bash
+ssh -p 10022 youruser@pas-12.macincloud.com 'brew install asc'
+```
+
+</Step>
+
+<Step>
+
+### Configure `rn-deploy`
+
+A minimal `deploy.config.json` overlay:
+
+```json
+{
+  "repo": {
+    "url": "git@github.com:org/myapp.git",
+    "branch": "main"
+  },
+  "signing": {
+    "syncRepo": "git@github.com:org/ios-signing.git"
+  }
+}
+```
+
+Skip the `aws` block — you're not provisioning EC2.
+
+</Step>
+
+</Steps>
+
+## Running builds
+
+`rn-deploy build` defaults to the EC2 Mac flow. For a custom host you can either:
+
+- Source the env file inline:
+
+  ```bash
+  set -a; source ../aws-mac-vnc/.env; set +a
+  rn-deploy build --profile production --host "$MAC_HOST" --port "$MAC_TUNNEL_PORT"
+  ```
+
+- Or wrap it in a script you commit (without secrets):
+
+  ```bash title="bin/build-on-macincloud.sh"
+  #!/usr/bin/env bash
+  set -euo pipefail
+  source "$(dirname "$0")/../aws-mac-vnc/.env"
+  exec rn-deploy build --profile production --host "$MAC_HOST" --port "$MAC_TUNNEL_PORT" "$@"
+  ```
+
+<Callout type="info">
+The `--host` and `--port` flags bypass the AWS provisioner. The instance is treated as long-lived: nothing is torn down at the end of the build except the signing keychain.
+</Callout>
+
+## Tradeoffs vs. EC2 Mac
+
+| | EC2 Mac (Dedicated Host) | MacinCloud Pay-As-You-Go |
+| --- | --- | --- |
+| Billing | 24h minimum per up/down | Per hour, no minimum |
+| Cost | ~$1.08/h × 24h = $26/day | ~$1.50/h × actual usage |
+| Sudo | Yes | No on managed plans |
+| Fresh boots | Easy (snapshots, AMIs) | Persistent OS state — manage manually |
+| CI ergonomics | Excellent | Awkward (tunnel mode) |
+| Performance | Native bare metal | Shared, more variable |
+
+For high-volume CI: EC2 Mac with a cached AMI. For occasional manual releases: MacinCloud is cheaper and simpler.

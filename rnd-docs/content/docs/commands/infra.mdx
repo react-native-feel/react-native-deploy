@@ -1,0 +1,171 @@
+---
+title: infra
+description: Provision and manage the bundled AWS EC2 Mac infrastructure.
+---
+
+The `infra` group manages the AWS EC2 Mac Dedicated Host + instance lifecycle. **Skip this entire page if you're using MacinCloud, a colo, or any non-AWS Mac** — `rn-deploy build` will just SSH straight into whatever host you provide.
+
+## Subcommands
+
+```text
+rn-deploy infra up
+rn-deploy infra down
+rn-deploy infra status
+rn-deploy infra ami-list
+rn-deploy infra ami-delete --ami-id <id>
+rn-deploy infra update-ip
+```
+
+### `up`
+
+Provision a fresh Dedicated Host + `mac2.metal` instance.
+
+```bash
+rn-deploy infra up [--non-interactive]
+```
+
+What happens:
+
+<Steps>
+
+<Step>
+
+### Validate AWS credentials
+
+`aws sts get-caller-identity` must succeed in the current shell.
+
+</Step>
+
+<Step>
+
+### Allocate a Dedicated Host
+
+EC2 Mac requires a Dedicated Host (24-hour minimum hold). Allocated in the configured region/AZ.
+
+</Step>
+
+<Step>
+
+### Create SSH key pair
+
+If `aws.keyPairName` doesn't exist, one is created and the private key is saved locally with mode 600.
+
+</Step>
+
+<Step>
+
+### Create / update security group
+
+Locked down to your current public IP on port 22 only.
+
+</Step>
+
+<Step>
+
+### Launch the instance
+
+Either from the default AMI or `aws.customAmiId` if set.
+
+</Step>
+
+<Step>
+
+### Wait for SSH
+
+Polls until `ssh` accepts a connection.
+
+</Step>
+
+</Steps>
+
+<Callout type="warn">
+AWS bills Dedicated Hosts in **24-hour minimums**. Spinning up costs the same whether you use it for 10 minutes or 23 hours. Plan your CI to bundle multiple builds into a single up/down cycle when possible.
+</Callout>
+
+### `down`
+
+Terminates the instance and releases the Dedicated Host.
+
+```bash
+rn-deploy infra down [--non-interactive]
+```
+
+Asks for confirmation unless `--non-interactive`. After the 24-hour minimum is up, releasing the host stops billing.
+
+### `status`
+
+Prints the current state, instance ID, public IP, and an estimated cost for the current up cycle.
+
+```bash
+rn-deploy infra status
+```
+
+```text
+ℹ Region:        us-east-1
+ℹ Host ID:       h-0abc123…
+ℹ Instance ID:   i-0def456…
+ℹ Public IP:     34.205.10.42
+ℹ Uptime:        3h 12m
+ℹ Est. cost:     $1.082/h × 3.20h = $3.46
+```
+
+### `ami-list`
+
+List custom AMIs created by `rn-deploy` (these are the warm-state snapshots saved at the end of successful builds).
+
+```bash
+rn-deploy infra ami-list
+```
+
+### `ami-delete`
+
+Remove a stale AMI when you no longer need it.
+
+```bash
+rn-deploy infra ami-delete --ami-id ami-0abcd1234
+```
+
+### `update-ip`
+
+Re-authorize your current public IP on the security group. Useful when you move locations (coffee shop → home) and SSH suddenly times out.
+
+```bash
+rn-deploy infra update-ip
+```
+
+## Typical lifecycle
+
+<Tabs items={["One-shot build", "Long-lived dev host", "CI"]}>
+
+```bash tab="One-shot build"
+# rn-deploy build does this for you, but the manual flow is:
+rn-deploy infra up
+rn-deploy build --no-teardown --profile production
+rn-deploy infra down
+```
+
+```bash tab="Long-lived dev host"
+rn-deploy infra up
+# leave it running for a day, run many builds
+rn-deploy build --no-teardown --profile preview
+rn-deploy build --no-teardown --profile preview
+rn-deploy build --no-teardown --profile production
+rn-deploy infra down
+```
+
+```bash tab="CI"
+# Best: run against an existing warm AMI to skip provisioning
+# {
+#   "aws": { "customAmiId": "ami-0abcd1234" }
+# }
+rn-deploy build --profile production --auto-submit --non-interactive
+# rn-deploy auto-tears-down because --no-teardown wasn't passed
+```
+
+</Tabs>
+
+## State file
+
+Infra state is persisted at `~/.rn-deploy/state.json`. It tracks the active host ID, instance ID, public IP, and key path. Don't edit by hand; use the commands.
+
+If state gets out of sync (instance terminated externally, etc.), delete the file and re-run `infra up`.
