@@ -15,6 +15,7 @@ import { resolveAscCredentials } from '../config/credentials.js';
 import { getExpoBuildSteps } from '../build/expo.js';
 import { getClassicBuildSteps } from '../build/classic.js';
 import { findAndDownloadIpa } from '../build/artifacts.js';
+import { distributeBuild } from '../distribute/index.js';
 import { createCustomAmi } from '../infra/ami.js';
 import { getPrivateKeyPath } from '../infra/key-pair.js';
 import { logger } from '../utils/logger.js';
@@ -65,7 +66,7 @@ export async function buildCommand(options = {}) {
   const buildStartTime = Date.now();
 
   // Step 1: Ensure infrastructure
-  logger.step(1, 6, 'Provisioning infrastructure');
+  logger.step(1, 7, 'Provisioning infrastructure');
   let state = loadState();
   if (!state || !(await isInstanceReachable(state))) {
     state = await infraUp(options);
@@ -75,20 +76,20 @@ export async function buildCommand(options = {}) {
   }
 
   // Step 2: SSH connect
-  logger.step(2, 6, 'Connecting via SSH');
+  logger.step(2, 7, 'Connecting via SSH');
   const keyPath = state.keyPath || getPrivateKeyPath(keyPairName);
   const ssh = await createSshConnection(state.publicIp, keyPath);
 
   try {
     // Step 3: Provision instance (skip if custom AMI)
     if (!config.aws.customAmiId) {
-      logger.step(3, 6, 'Setting up build environment');
+      logger.step(3, 7, 'Setting up build environment');
       await provisionInstance(ssh, {
         nodeVersion: config.aws.nodeVersion,
         xcodeVersion: config.aws.xcodeVersion,
       });
     } else {
-      logger.step(3, 6, 'Using custom AMI — skipping provisioning');
+      logger.step(3, 7, 'Using custom AMI — skipping provisioning');
     }
 
     // Resolve ASC credentials locally (keychain > env > config) and authenticate on remote
@@ -128,7 +129,7 @@ export async function buildCommand(options = {}) {
     };
 
     // Step 4: Build inside tmux session for resilience
-    logger.step(4, 6, 'Building app');
+    logger.step(4, 7, 'Building app');
     const buildSteps = profile.buildType === 'expo'
       ? getExpoBuildSteps({ scheme: profile.scheme, buildConfiguration: profile.buildConfiguration, workDir })
       : getClassicBuildSteps({ scheme: profile.scheme, buildConfiguration: profile.buildConfiguration, workDir });
@@ -161,15 +162,41 @@ export async function buildCommand(options = {}) {
     await Promise.race([tailPromise, timeoutPromise]);
 
     // Step 5: Retrieve artifact
-    logger.step(5, 6, 'Retrieving build artifact');
+    logger.step(5, 7, 'Retrieving build artifact');
     const exportPath = `${workDir}/build/export`;
     const { localPath, remotePath } = await findAndDownloadIpa(
       ssh, exportPath, process.cwd(), profile.scheme
     );
 
-    // Step 6: Submit (if auto-submit)
+    // Step 6: Distribute (upload + QR install) — skipped without config or for app-store
+    logger.step(6, 7, 'Distributing build');
+    try {
+      const commit = (await sshExec(ssh, `cd ${workDir} && git rev-parse --short HEAD`)).stdout.trim();
+      await distributeBuild({
+        ssh,
+        config,
+        profile,
+        profileName,
+        remoteIpaPath: remotePath,
+        signingInfo,
+        appMeta: {
+          title: config.app?.title || profile.scheme,
+          slug: config.app?.slug,
+          version: config.app?.version,
+          buildNumber: config.app?.buildNumber,
+          commit,
+          branch: config.repo?.branch,
+          localIpaPath: localPath,
+        },
+      });
+    } catch (err) {
+      logger.warn(`Distribute step failed: ${err.message}`);
+      logger.warn('IPA is still available locally; continuing.');
+    }
+
+    // Step 7: Submit (if auto-submit)
     if (options.autoSubmit) {
-      logger.step(6, 6, 'Submitting to TestFlight');
+      logger.step(7, 7, 'Submitting to TestFlight');
       await submitToTestFlight(ssh, {
         ipaPath: remotePath,
         config,
@@ -177,7 +204,7 @@ export async function buildCommand(options = {}) {
         whatToTest: options.message, // --message flag used as "What to Test"
       });
     } else {
-      logger.step(6, 6, 'Build complete');
+      logger.step(7, 7, 'Build complete');
       logger.success(`IPA saved to: ${localPath}`);
     }
 

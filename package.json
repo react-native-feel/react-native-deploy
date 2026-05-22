@@ -21,6 +21,7 @@
     "commander": "^14.0.3",
     "inquirer": "^13.3.0",
     "node-ssh": "^13.2.1",
-    "ora": "^9.3.0"
+    "ora": "^9.3.0",
+    "qrcode-terminal": "^0.12.0"
   }
 }

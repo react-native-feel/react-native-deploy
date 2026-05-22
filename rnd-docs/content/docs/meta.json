@@ -8,6 +8,7 @@
     "build-profiles",
     "signing",
     "credentials",
+    "distribution",
     "---Reference---",
     "commands",
     "---Guides---",

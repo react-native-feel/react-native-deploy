@@ -148,6 +148,14 @@ export function loadFromExpoProject(dir = process.cwd(), overlay = null) {
     repo: overlay?.repo || { url: '', branch: 'main' },
     build: {},
     submit: {},
+    storage: overlay?.storage || null,
+    app: {
+      title: appName,
+      slug: appConfig?.slug || sanitizeScheme(appName),
+      version: appConfig?.version || null,
+      buildNumber: appConfig?.ios?.buildNumber || null,
+      icon: appConfig?.icon || appConfig?.ios?.icon || null,
+    },
     _source: { eas: project.easPath, app: project.appJsonPath || project.appConfigPath },
   };
 

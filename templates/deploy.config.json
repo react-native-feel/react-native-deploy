@@ -17,6 +17,15 @@
     "createMissing": true,
     "syncRepo": null
   },
+  "storage": null,
+  "_storage_example_r2_": {
+    "kind": "r2",
+    "accountId": "<cloudflare-account-id>",
+    "bucket": "rn-deploy-artifacts",
+    "accessKeyId": "<R2_ACCESS_KEY_ID>",
+    "secretAccessKey": "<R2_SECRET_ACCESS_KEY>",
+    "publicBaseUrl": "https://artifacts.example.com"
+  },
   "repo": {
     "url": "",
     "branch": "main"

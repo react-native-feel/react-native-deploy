@@ -1,3 +1,5 @@
+import { validateStorageConfig } from '../storage/index.js';
+
 const REQUIRED_FIELDS = {
   'aws.region': 'string',
   'aws.instanceType': 'string',
@@ -30,6 +32,10 @@ export function validateConfig(config) {
 
   // asc credentials are no longer required in config — they live in macOS keychain
   // via "rn-deploy credentials configure". We only validate them at build/submit time.
+
+  if (config.storage) {
+    for (const e of validateStorageConfig(config.storage)) errors.push(e);
+  }
 
   if (config.build) {
     for (const [profileName, profile] of Object.entries(config.build)) {

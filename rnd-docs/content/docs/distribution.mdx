@@ -1,0 +1,151 @@
+---
+title: OTA distribution (QR install)
+description: Host every internal/ad-hoc build on object storage, get a QR code that installs the build directly to an iPhone over the air — Expo's "Install on a test device" equivalent.
+icon: QrCode
+---
+
+EAS gives you a QR code on the build page that opens an `itms-services://` URL and installs the build on a test device with no TestFlight detour. `rn-deploy` does the same thing without sending your IPA through a third party — it uploads to **your own object storage** (Cloudflare R2 by default, S3 if you prefer), serves a tiny landing page next to the IPA, and prints the QR in your terminal at the end of every build.
+
+This page is iOS-only and only applies to **ad-hoc / internal / enterprise / development** distributions. For `app-store` builds the install channel is TestFlight via `--auto-submit`.
+
+## How it works
+
+<Steps>
+
+<Step>
+
+### Build the IPA on the Mac host
+
+Nothing changes here — same `xcodebuild archive && xcodebuild -exportArchive` flow that already produced your `.ipa`.
+
+</Step>
+
+<Step>
+
+### Upload directly from the Mac to your bucket
+
+`rn-deploy` shells out to the `aws` CLI on the build host with your R2/S3 credentials and a custom endpoint, so the IPA goes straight from the build host to your bucket — it never round-trips through your laptop.
+
+If `aws` isn't on the build host, it falls back to a local upload using the IPA copy it already downloaded for you.
+
+</Step>
+
+<Step>
+
+### Generate `manifest.plist` and `index.html`
+
+Two small files land in the same `builds/{slug}/{buildId}/` prefix:
+
+- `manifest.plist` — the Apple-defined [OTA install manifest](https://developer.apple.com/library/archive/documentation/IDEs/Conceptual/AppDistributionGuide/DistributingEnterpriseProgramApps/DistributingEnterpriseProgramApps.html) that points at your IPA.
+- `index.html` — a one-page install landing page. On iOS Safari it shows an **Install on iPhone / iPad** button wired to `itms-services://?action=download-manifest;url={manifestUrl}`. Anywhere else it tells you to open the URL on a phone.
+
+A `build.json` blob is also written alongside — that's what a future dashboard will index.
+
+</Step>
+
+<Step>
+
+### Terminal prints a QR
+
+The CLI emits the install-page URL, the raw `itms-services://` URL, the direct `.ipa` URL, and a terminal-renderable QR code for the install page. Point your iPhone's Camera at it → tap the notification → tap **Install**.
+
+</Step>
+
+</Steps>
+
+## Configuration
+
+Add a `storage` block to `deploy.config.json`:
+
+```jsonc title="deploy.config.json"
+{
+  "storage": {
+    "kind": "r2",
+    "accountId": "<cloudflare-account-id>",
+    "bucket": "rn-deploy-artifacts",
+    "accessKeyId": "<R2_ACCESS_KEY_ID>",
+    "secretAccessKey": "<R2_SECRET_ACCESS_KEY>",
+    "publicBaseUrl": "https://artifacts.example.com"
+  }
+}
+```
+
+You can keep secrets out of the file by setting `RN_DEPLOY_STORAGE_ACCESS_KEY_ID` / `RN_DEPLOY_STORAGE_SECRET_ACCESS_KEY` (or `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY`) in your environment instead.
+
+### Fields
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `kind` | yes | `"r2"` or `"s3"` |
+| `bucket` | yes | Bucket name |
+| `publicBaseUrl` | yes | HTTPS prefix the IPA will be served from. iOS **requires HTTPS** with a valid cert for `itms-services://` to work. |
+| `accountId` | r2 only | Your Cloudflare account ID — used to build `https://{accountId}.r2.cloudflarestorage.com`. |
+| `region` | s3 only | AWS region, e.g. `us-east-1`. |
+| `accessKeyId` / `secretAccessKey` | yes | Or use env vars (see above). |
+
+### Setting up Cloudflare R2 (one-time)
+
+<Steps>
+
+<Step>
+
+### Create the bucket
+
+In the Cloudflare dashboard, **R2 → Create bucket** → pick a name (e.g. `rn-deploy-artifacts`). Don't enable bucket-level encryption; objects are encrypted at rest by default.
+
+</Step>
+
+<Step>
+
+### Make it publicly readable (or front it with a custom domain)
+
+Either:
+
+- **R2 dev URL**: enable the public `*.r2.dev` URL on the bucket — fine for internal use, throttled by Cloudflare.
+- **Custom domain** (recommended): connect a domain you control (e.g. `artifacts.example.com`) and use that as `publicBaseUrl`. iOS likes a clean HTTPS domain.
+
+</Step>
+
+<Step>
+
+### Create an R2 API token scoped to this bucket
+
+**R2 → Manage R2 API Tokens → Create API token** → permission **Object Read & Write** → restrict to the bucket. Copy the **Access Key ID** and **Secret Access Key** into `deploy.config.json` (or your env).
+
+</Step>
+
+</Steps>
+
+### Using AWS S3 instead
+
+Set `kind: "s3"` and `region`. The IPA + manifest are uploaded with `aws s3 cp`; make sure the bucket policy serves them publicly (or front it with CloudFront).
+
+## What gets uploaded per build
+
+```
+builds/<slug>/<uuid>/
+├── app.ipa            # the build
+├── manifest.plist     # iOS OTA install manifest pointing at app.ipa
+├── index.html         # the install landing page
+└── build.json         # metadata blob — id, version, commit, urls, timestamps
+```
+
+The build ID is a UUID, so the URL is unguessable. There's no auth in phase 1 — if you need access controls, front the bucket with a Cloudflare Worker that validates a cookie before serving these prefixes.
+
+## Important caveats
+
+<Callout type="warn">
+**Ad-hoc builds only install on registered devices.** The provisioning profile baked into your IPA must list the device UDID, or iOS will reject the install with "Unable to install — device not eligible." Register devices in App Store Connect (or via `asc devices`) and re-fetch your provisioning profile before the build.
+</Callout>
+
+<Callout type="warn">
+**HTTPS is mandatory.** iOS refuses `itms-services://` over plain HTTP. R2's `*.r2.dev` URLs and custom domains both satisfy this.
+</Callout>
+
+<Callout type="info">
+**`distribution: "app-store"` skips this step.** Use TestFlight (`--auto-submit`) for those builds — the iOS App Store install path doesn't use `itms-services://`.
+</Callout>
+
+## What's next (phase 2)
+
+The metadata blob (`build.json`) is the first half of a future build dashboard. Phase 2 will add routes in this docs site that index the bucket, list builds per profile, and render the QR/install page in a UI instead of the terminal.

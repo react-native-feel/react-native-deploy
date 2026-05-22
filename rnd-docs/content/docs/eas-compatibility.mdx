@@ -134,6 +134,10 @@ EAS Workflows is a separate product; `rn-deploy` is just a build/submit CLI. Wir
 We use [`asc signing sync`](/docs/guides/signing-sync) (encrypted git repo) for the same outcome — see the [signing guide](/docs/signing).
 </Accordion>
 
+<Accordion title="Install builds on a phone via QR code (Expo's 'Install on a test device')">
+Supported — see [OTA distribution](/docs/distribution). Every non-`app-store` build is uploaded to your own R2/S3 bucket alongside an iOS `manifest.plist` and a one-page install landing page, and the CLI prints a QR you can scan with the iPhone camera to install over the air. No third-party hosting involved.
+</Accordion>
+
 <Accordion title="Android builds">
 This release is iOS-only. Android builds (Gradle / signing config / Play Console upload) are planned.
 </Accordion>
