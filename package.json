@@ -2,20 +2,45 @@
   "name": "rn-deploy",
   "version": "1.0.0",
   "type": "module",
-  "main": "index.js",
+  "description": "Build React Native iOS apps on a remote Mac and deploy to TestFlight or via OTA.",
+  "keywords": [
+    "react-native",
+    "expo",
+    "ios",
+    "testflight",
+    "app-store",
+    "ota",
+    "ci",
+    "deploy",
+    "ec2-mac",
+    "macincloud"
+  ],
+  "author": "Rodrigo Figueroa (https://github.com/bidah)",
+  "license": "MIT",
+  "homepage": "https://github.com/bidah/react-native-deploy#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bidah/react-native-deploy.git"
+  },
+  "bugs": {
+    "url": "https://github.com/bidah/react-native-deploy/issues"
+  },
   "bin": {
     "rn-deploy": "./bin/rn-deploy.js"
   },
-  "directories": {
-    "doc": "docs"
+  "files": [
+    "bin",
+    "src",
+    "templates",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18.17"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
   "dependencies": {
     "chalk": "^5.6.2",
     "commander": "^14.0.3",
