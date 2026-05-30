@@ -2,8 +2,8 @@ import { loadConfig, mergeWithFlags, validateLoadedConfig } from '../config/load
 import { resolveProfile } from '../config/profiles.js';
 import { loadState } from '../infra/state.js';
 import { infraUp, infraDown } from './infra.js';
-import { createSshConnection, sshExec } from '../remote/ssh.js';
-import { provisionInstance, cloneRepo } from '../remote/provision.js';
+import { createSshConnection, sshExec, sshOptsFromHost } from '../remote/ssh.js';
+import { provisionInstance, provisionManagedHost, cloneRepo } from '../remote/provision.js';
 import {
   authenticateAsc,
   setupSigning,
@@ -61,28 +61,42 @@ export async function buildCommand(options = {}) {
     }
   }
 
-  const { region, keyPairName } = config.aws;
+  const hostKind = config.host?.kind || 'aws';
+  const isManaged = hostKind === 'macincloud';
   const totalTimeoutMs = (options.timeout || 60) * 60 * 1000;
   const buildStartTime = Date.now();
 
-  // Step 1: Ensure infrastructure
-  logger.step(1, 7, 'Provisioning infrastructure');
-  let state = loadState();
-  if (!state || !(await isInstanceReachable(state))) {
-    state = await infraUp(options);
-    if (!state) return;
+  // Step 1: Ensure infrastructure (AWS only — managed hosts already exist)
+  let state = null;
+  let ssh;
+  if (isManaged) {
+    logger.step(1, 7, `Using managed host ${config.host.host}`);
+    logger.step(2, 7, 'Connecting via SSH');
+    ssh = await createSshConnection(sshOptsFromHost(config.host));
   } else {
-    logger.info(`Reusing existing instance: ${state.instanceId} at ${state.publicIp}`);
+    const { keyPairName } = config.aws;
+    logger.step(1, 7, 'Provisioning infrastructure');
+    state = loadState();
+    if (!state || !(await isInstanceReachable(state))) {
+      state = await infraUp(options);
+      if (!state) return;
+    } else {
+      logger.info(`Reusing existing instance: ${state.instanceId} at ${state.publicIp}`);
+    }
+
+    logger.step(2, 7, 'Connecting via SSH');
+    const keyPath = state.keyPath || getPrivateKeyPath(keyPairName);
+    ssh = await createSshConnection(state.publicIp, keyPath);
   }
 
-  // Step 2: SSH connect
-  logger.step(2, 7, 'Connecting via SSH');
-  const keyPath = state.keyPath || getPrivateKeyPath(keyPairName);
-  const ssh = await createSshConnection(state.publicIp, keyPath);
+  const cloneWorkDir = isManaged ? (config.host.workDir || '~/rn-deploy-work') : '~/build-workspace';
 
   try {
-    // Step 3: Provision instance (skip if custom AMI)
-    if (!config.aws.customAmiId) {
+    // Step 3: Provision/verify build environment
+    if (isManaged) {
+      logger.step(3, 7, 'Verifying managed host toolchain');
+      await provisionManagedHost(ssh);
+    } else if (!config.aws.customAmiId) {
       logger.step(3, 7, 'Setting up build environment');
       await provisionInstance(ssh, {
         nodeVersion: config.aws.nodeVersion,
@@ -109,7 +123,7 @@ export async function buildCommand(options = {}) {
     });
 
     // Clone repo
-    const workDir = await cloneRepo(ssh, config.repo.url, config.repo.branch);
+    const workDir = await cloneRepo(ssh, config.repo.url, config.repo.branch, cloneWorkDir);
 
     // Generate ExportOptions.plist on remote using real signing values
     const method = distribution === 'ad-hoc' ? 'ad-hoc' : 'app-store';
@@ -208,11 +222,11 @@ export async function buildCommand(options = {}) {
       logger.success(`IPA saved to: ${localPath}`);
     }
 
-    // Offer AMI caching after first build with no custom AMI
-    if (!config.aws.customAmiId && !options.nonInteractive) {
+    // Offer AMI caching after first build with no custom AMI (AWS only)
+    if (!isManaged && !config.aws.customAmiId && !options.nonInteractive) {
       const saveAmi = await confirm('Save this instance as a custom AMI for faster future builds?', true);
       if (saveAmi) {
-        const amiId = await createCustomAmi(state.instanceId, region);
+        const amiId = await createCustomAmi(state.instanceId, config.aws.region);
         logger.info(`Add this to your deploy.config.json aws section: "customAmiId": "${amiId}"`);
       }
     }
@@ -223,8 +237,11 @@ export async function buildCommand(options = {}) {
     ssh.dispose();
   }
 
-  // Teardown unless --no-teardown
-  if (!options.noTeardown) {
+  // Teardown unless --no-teardown. Managed hosts are never torn down — we don't
+  // own the machine's lifecycle, so just drop the connection.
+  if (isManaged) {
+    logger.info('Managed host left running (not owned by rn-deploy).');
+  } else if (!options.noTeardown) {
     await infraDown(options);
   } else {
     logger.info('Instance kept alive (--no-teardown). Run "rn-deploy infra down" when done.');

@@ -2,6 +2,18 @@
   "cli": {
     "version": "1.0.0"
   },
+  "host": {
+    "kind": "aws"
+  },
+  "_host_example_macincloud_": {
+    "kind": "macincloud",
+    "host": "TX0XX.macincloud.com",
+    "port": 22,
+    "user": "userXXXXXX",
+    "password": "${MAC_PASSWORD}",
+    "workDir": "~/rn-deploy-work",
+    "_comment": "Use \"privateKey\" instead of \"password\" for key auth. Values like ${MAC_PASSWORD} are read from the environment at load time so secrets stay out of git."
+  },
   "aws": {
     "region": "us-east-1",
     "instanceType": "mac2.metal",

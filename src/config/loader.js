@@ -3,6 +3,7 @@ import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { validateConfig } from './schema.js';
 import { loadFromExpoProject, findExpoProject } from './expo-loader.js';
+import { normalizeHost } from './host.js';
 
 const CONFIG_FILENAME = 'deploy.config.json';
 
@@ -42,7 +43,7 @@ export function loadConfig(dir = process.cwd()) {
     );
   }
 
-  return config;
+  return normalizeHost(config);
 }
 
 export function mergeWithFlags(config, flags) {

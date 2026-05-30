@@ -57,9 +57,38 @@ export async function setupCommand() {
 
   const template = JSON.parse(readFileSync(TEMPLATE_PATH, 'utf-8'));
 
-  template.aws.region = await select('AWS region?', [
-    'us-east-1', 'us-east-2', 'us-west-2', 'eu-west-1', 'ap-southeast-1',
+  // Strip example-only keys so they never leak into a generated config.
+  delete template._host_example_macincloud_;
+  delete template._storage_example_r2_;
+
+  const hostKind = await select('Where should builds run?', [
+    { name: 'AWS EC2 Mac (provisioned + torn down per build)', value: 'aws' },
+    { name: 'MacinCloud / existing Mac over SSH (no infra management)', value: 'macincloud' },
   ]);
+
+  if (hostKind === 'aws') {
+    template.host = { kind: 'aws' };
+    template.aws.region = await select('AWS region?', [
+      'us-east-1', 'us-east-2', 'us-west-2', 'eu-west-1', 'ap-southeast-1',
+    ]);
+  } else {
+    delete template.aws;
+    const macHost = await input('Mac SSH host (e.g. TX0XX.macincloud.com):');
+    const macUser = await input('SSH username:');
+    const useKey = await confirm('Authenticate with a private key (no = password)?', false);
+    template.host = {
+      kind: 'macincloud',
+      host: macHost,
+      port: Number(await input('SSH port:', '22')),
+      user: macUser,
+      workDir: await input('Remote working directory:', '~/rn-deploy-work'),
+    };
+    if (useKey) {
+      template.host.privateKey = await input('Path to private key:', '~/.ssh/id_rsa');
+    } else {
+      template.host.password = await input('SSH password:');
+    }
+  }
 
   template.repo.url = await input('Git repository URL:');
   template.repo.branch = await input('Default branch:', 'main');

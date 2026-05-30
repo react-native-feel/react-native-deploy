@@ -47,6 +47,34 @@ Run `rn-deploy <command> --help` for full flags.
 
 `rn-deploy` reads `deploy.config.json` from your project root. It follows EAS-style profile inheritance — `preview` and `development` `extends: "production"` by default. See `templates/deploy.config.json` for the full shape.
 
+### Build host
+
+The `host` block picks where builds run. Two kinds are supported:
+
+```jsonc
+// AWS EC2 Mac — provisioned and torn down per build (default)
+"host": { "kind": "aws" }   // AWS settings live in the "aws" block
+
+// MacinCloud or any SSH-reachable Mac you already own
+"host": {
+  "kind": "macincloud",
+  "host": "TX0XX.macincloud.com",
+  "port": 22,
+  "user": "userXXXXXX",
+  "password": "${MAC_PASSWORD}",   // or "privateKey": "~/.ssh/id_rsa"
+  "workDir": "~/rn-deploy-work"
+}
+```
+
+Differences with `kind: "macincloud"`:
+
+- **No infra lifecycle** — `rn-deploy` never provisions or tears down the machine (`infra up`/`down` are AWS-only). It connects, builds, and disconnects.
+- **No sudo required** — the host is verified rather than provisioned. Xcode, Node, git, and CocoaPods must already be installed; the build fails with guidance if any are missing.
+- **Password or key auth** — set either `password` or `privateKey`.
+- **Secrets stay out of git** — any `${VAR}` in the host block is read from the environment at load time. Keep the literal `${MAC_PASSWORD}` in `deploy.config.json` and export the real value (e.g. from a gitignored `.env`).
+
+Omitting the `host` block entirely is equivalent to `{ "kind": "aws" }`, so existing AWS configs keep working unchanged.
+
 ## Credentials
 
 Credentials never live in plaintext. `rn-deploy` delegates to [`asc`](https://github.com/rork/asc), which stores App Store Connect API keys encrypted in the macOS keychain. For each build, the key is uploaded to the remote Mac at `/tmp/AuthKey.p8` (mode `600`), used once, then torn down.

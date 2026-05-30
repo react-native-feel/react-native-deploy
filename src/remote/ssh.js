@@ -1,31 +1,67 @@
 import { NodeSSH } from 'node-ssh';
 import { logger } from '../utils/logger.js';
 
-export function buildSshConfig(host, privateKeyPath, username = 'ec2-user') {
-  return {
+export function buildSshConfig(opts = {}) {
+  const {
     host,
-    username,
+    port = 22,
+    username = 'ec2-user',
     privateKeyPath,
+    password,
+  } = opts;
+
+  const config = {
+    host,
+    port,
+    username,
     readyTimeout: 30000,
     keepaliveInterval: 10000,
   };
+  if (privateKeyPath) config.privateKeyPath = privateKeyPath;
+  if (password) config.password = password;
+  return config;
 }
 
-export async function createSshConnection(host, privateKeyPath, retries = 3) {
-  const config = buildSshConfig(host, privateKeyPath);
+// Map a normalized config `host` block to SSH connection options.
+// AWS connections are built from runtime state (publicIp + key) by the caller;
+// this handles the byo/managed kinds where creds live in config.
+export function sshOptsFromHost(host) {
+  if (host?.kind === 'macincloud') {
+    return {
+      host: host.host,
+      port: host.port || 22,
+      username: host.user,
+      password: host.password,
+      privateKeyPath: host.privateKey,
+    };
+  }
+  throw new Error(`sshOptsFromHost: unsupported host.kind "${host?.kind}"`);
+}
+
+// Accepts either the legacy positional form createSshConnection(host, keyPath, retries)
+// or an options object createSshConnection({ host, port, username, password, privateKeyPath, retries }).
+export async function createSshConnection(hostOrOpts, privateKeyPath, retries = 3) {
+  let opts;
+  if (hostOrOpts && typeof hostOrOpts === 'object') {
+    opts = { retries, ...hostOrOpts };
+  } else {
+    opts = { host: hostOrOpts, privateKeyPath, retries };
+  }
+  const attempts = opts.retries ?? 3;
+  const config = buildSshConfig(opts);
   const ssh = new NodeSSH();
 
-  for (let attempt = 1; attempt <= retries; attempt++) {
+  for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
       await ssh.connect(config);
-      logger.success(`SSH connected to ${host}`);
+      logger.success(`SSH connected to ${config.username}@${config.host}:${config.port}`);
       return ssh;
     } catch (err) {
-      if (attempt === retries) {
-        throw new Error(`SSH connection failed after ${retries} attempts: ${err.message}`);
+      if (attempt === attempts) {
+        throw new Error(`SSH connection failed after ${attempts} attempts: ${err.message}`);
       }
       const delay = Math.pow(2, attempt) * 1000;
-      logger.warn(`SSH attempt ${attempt}/${retries} failed. Retrying in ${delay / 1000}s...`);
+      logger.warn(`SSH attempt ${attempt}/${attempts} failed. Retrying in ${delay / 1000}s...`);
       await new Promise(r => setTimeout(r, delay));
     }
   }

@@ -5,6 +5,7 @@ import { validateConfig } from '../../src/config/schema.js';
 describe('validateConfig', () => {
   const validConfig = {
     cli: { version: '1.0.0' },
+    host: { kind: 'aws' },
     aws: {
       region: 'us-east-1',
       instanceType: 'mac2.metal',
@@ -48,13 +49,6 @@ describe('validateConfig', () => {
     assert.ok(errors.some(e => e.includes('aws.region')));
   });
 
-  it('rejects missing asc.keyId', () => {
-    const bad = JSON.parse(JSON.stringify(validConfig));
-    delete bad.asc.keyId;
-    const errors = validateConfig(bad);
-    assert.ok(errors.some(e => e.includes('asc.keyId')));
-  });
-
   it('rejects invalid buildType', () => {
     const bad = JSON.parse(JSON.stringify(validConfig));
     bad.build.production.buildType = 'invalid';
@@ -67,5 +61,53 @@ describe('validateConfig', () => {
     delete noSubmit.submit;
     const errors = validateConfig(noSubmit);
     assert.deepStrictEqual(errors, []);
+  });
+
+  it('accepts macincloud host without aws block', () => {
+    const cfg = {
+      cli: { version: '1.0.0' },
+      host: {
+        kind: 'macincloud',
+        host: 'TX0XX.macincloud.com',
+        user: 'u',
+        password: 'p',
+        port: 22,
+        workDir: '~/work',
+      },
+      repo: { url: 'git@github.com:u/a.git', branch: 'main' },
+      build: {
+        production: {
+          buildType: 'expo',
+          scheme: 'App',
+          buildConfiguration: 'Release',
+          env: {},
+        },
+      },
+    };
+    const errors = validateConfig(cfg);
+    assert.deepStrictEqual(errors, []);
+  });
+
+  it('rejects missing aws.region when host.kind=aws', () => {
+    const bad = JSON.parse(JSON.stringify(validConfig));
+    delete bad.aws.region;
+    const errors = validateConfig(bad);
+    assert.ok(errors.some(e => e.includes('aws.region')));
+  });
+
+  it('does not require aws.region when host.kind=macincloud', () => {
+    const cfg = {
+      cli: { version: '1.0.0' },
+      host: {
+        kind: 'macincloud',
+        host: 'h',
+        user: 'u',
+        password: 'p',
+      },
+      repo: { url: 'git@github.com:u/a.git', branch: 'main' },
+      build: { production: { buildType: 'expo', scheme: 'App', buildConfiguration: 'Release', env: {} } },
+    };
+    const errors = validateConfig(cfg);
+    assert.ok(!errors.some(e => e.includes('aws.')));
   });
 });

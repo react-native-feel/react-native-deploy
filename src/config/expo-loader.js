@@ -130,6 +130,7 @@ export function loadFromExpoProject(dir = process.cwd(), overlay = null) {
 
   const config = {
     cli: { version: '1.0.0' },
+    ...(overlay?.host ? { host: overlay.host } : {}),
     aws: overlay?.aws || {
       region: 'us-east-1',
       instanceType: 'mac2.metal',

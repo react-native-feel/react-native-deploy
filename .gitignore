@@ -4,3 +4,4 @@ node_modules/
 *.p8
 .tmp-test/
 .tmp-test-state/
+.e2e/credentials.env

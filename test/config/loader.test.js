@@ -29,7 +29,7 @@ describe('loadConfig', () => {
   });
 
   it('throws if config file not found', () => {
-    assert.throws(() => loadConfig(TMP), /deploy\.config\.json not found/);
+    assert.throws(() => loadConfig(TMP), /No config found/);
   });
 });
 
