@@ -33,3 +33,19 @@ export async function findAndDownloadIpa(ssh, exportPath, localDir, scheme) {
 
   return { remotePath: remoteIpaPath, localPath };
 }
+
+export async function downloadSimulatorTarball(ssh, remoteTarballPath, localDir, scheme) {
+  const exists = await sshExec(ssh, `test -f ${remoteTarballPath} && echo yes || echo no`);
+  if (exists.stdout.trim() !== 'yes') {
+    throw new Error(`No simulator tarball found at ${remoteTarballPath}. Build may have failed.`);
+  }
+
+  const localBuildDir = join(localDir, 'build');
+  mkdirSync(localBuildDir, { recursive: true });
+  const localPath = join(localBuildDir, `${scheme}.app.tgz`);
+
+  await sshDownload(ssh, remoteTarballPath, localPath);
+  logger.success(`Downloaded simulator app to ${localPath}`);
+
+  return { remotePath: remoteTarballPath, localPath };
+}

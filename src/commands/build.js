@@ -14,7 +14,8 @@ import {
 import { resolveAscCredentials } from '../config/credentials.js';
 import { getExpoBuildSteps } from '../build/expo.js';
 import { getClassicBuildSteps } from '../build/classic.js';
-import { findAndDownloadIpa } from '../build/artifacts.js';
+import { getSimulatorTarballPath } from '../build/simulator.js';
+import { findAndDownloadIpa, downloadSimulatorTarball } from '../build/artifacts.js';
 import { distributeBuild } from '../distribute/index.js';
 import { createCustomAmi } from '../infra/ami.js';
 import { getPrivateKeyPath } from '../infra/key-pair.js';
@@ -106,47 +107,57 @@ export async function buildCommand(options = {}) {
       logger.step(3, 7, 'Using custom AMI — skipping provisioning');
     }
 
-    // Resolve ASC credentials locally (keychain > env > config) and authenticate on remote
-    const ascCreds = resolveAscCredentials(config);
-    logger.debug(`ASC credentials source: ${ascCreds.source}`);
-    await authenticateAsc(ssh, ascCreds);
-
-    // Fetch + install signing assets on remote (this is what was missing before)
     const distribution = profile.distribution || 'app-store';
-    const signingInfo = await setupSigning(ssh, {
-      bundleId: config.signing?.bundleId || profile.bundleId,
-      profileType: profile.profileType || config.signing?.profileType,
-      distribution,
-      syncRepo: config.signing?.syncRepo,
-      p12Password: config.signing?.p12Password,
-      createMissing: config.signing?.createMissing !== false,
-    });
+    const isSimulator = distribution === 'simulator';
+
+    // Simulator builds are unsigned — skip all ASC/signing/ExportOptions work.
+    let signingInfo = null;
+    if (!isSimulator) {
+      // Resolve ASC credentials locally (keychain > env > config) and authenticate on remote
+      const ascCreds = resolveAscCredentials(config);
+      logger.debug(`ASC credentials source: ${ascCreds.source}`);
+      await authenticateAsc(ssh, ascCreds);
+
+      // Fetch + install signing assets on remote
+      signingInfo = await setupSigning(ssh, {
+        bundleId: config.signing?.bundleId || profile.bundleId,
+        profileType: profile.profileType || config.signing?.profileType,
+        distribution,
+        syncRepo: config.signing?.syncRepo,
+        p12Password: config.signing?.p12Password,
+        createMissing: config.signing?.createMissing !== false,
+      });
+    } else {
+      logger.info('Simulator build — skipping signing (unsigned iphonesimulator build).');
+    }
 
     // Clone repo
     const workDir = await cloneRepo(ssh, config.repo.url, config.repo.branch, cloneWorkDir);
 
-    // Generate ExportOptions.plist on remote using real signing values
-    const method = distribution === 'ad-hoc' ? 'ad-hoc' : 'app-store';
-    const plistContent = generateExportOptionsPlist({
-      method,
-      teamId: signingInfo.teamId,
-      bundleId: signingInfo.bundleId,
-      profileName: signingInfo.profileName,
-      profileUuid: signingInfo.profileUuid,
-    });
-    await sshExec(ssh, `cat > ${workDir}/ExportOptions.plist << 'PLIST_EOF'\n${plistContent}\nPLIST_EOF`);
+    if (!isSimulator) {
+      // Generate ExportOptions.plist on remote using real signing values
+      const method = distribution === 'ad-hoc' ? 'ad-hoc' : 'app-store';
+      const plistContent = generateExportOptionsPlist({
+        method,
+        teamId: signingInfo.teamId,
+        bundleId: signingInfo.bundleId,
+        profileName: signingInfo.profileName,
+        profileUuid: signingInfo.profileUuid,
+      });
+      await sshExec(ssh, `cat > ${workDir}/ExportOptions.plist << 'PLIST_EOF'\n${plistContent}\nPLIST_EOF`);
 
-    // Make build keychain available to xcodebuild (it inherits PATH/env from the tmux shell)
-    profile.env = {
-      ...(profile.env || {}),
-      OTHER_CODE_SIGN_FLAGS: `--keychain ${signingInfo.keychain}`,
-    };
+      // Make build keychain available to xcodebuild (it inherits PATH/env from the tmux shell)
+      profile.env = {
+        ...(profile.env || {}),
+        OTHER_CODE_SIGN_FLAGS: `--keychain ${signingInfo.keychain}`,
+      };
+    }
 
     // Step 4: Build inside tmux session for resilience
     logger.step(4, 7, 'Building app');
     const buildSteps = profile.buildType === 'expo'
-      ? getExpoBuildSteps({ scheme: profile.scheme, buildConfiguration: profile.buildConfiguration, workDir })
-      : getClassicBuildSteps({ scheme: profile.scheme, buildConfiguration: profile.buildConfiguration, workDir });
+      ? getExpoBuildSteps({ scheme: profile.scheme, buildConfiguration: profile.buildConfiguration, workDir, distribution })
+      : getClassicBuildSteps({ scheme: profile.scheme, buildConfiguration: profile.buildConfiguration, workDir, distribution });
 
     // Build env vars as export string for shell persistence
     const envExports = Object.entries(profile.env || {})
@@ -177,10 +188,18 @@ export async function buildCommand(options = {}) {
 
     // Step 5: Retrieve artifact
     logger.step(5, 7, 'Retrieving build artifact');
-    const exportPath = `${workDir}/build/export`;
-    const { localPath, remotePath } = await findAndDownloadIpa(
-      ssh, exportPath, process.cwd(), profile.scheme
-    );
+    let localPath, remotePath;
+    if (isSimulator) {
+      const tarball = getSimulatorTarballPath(workDir, profile.scheme);
+      ({ localPath, remotePath } = await downloadSimulatorTarball(
+        ssh, tarball, process.cwd(), profile.scheme
+      ));
+    } else {
+      const exportPath = `${workDir}/build/export`;
+      ({ localPath, remotePath } = await findAndDownloadIpa(
+        ssh, exportPath, process.cwd(), profile.scheme
+      ));
+    }
 
     // Step 6: Distribute (upload + QR install) — skipped without config or for app-store
     logger.step(6, 7, 'Distributing build');
@@ -205,11 +224,15 @@ export async function buildCommand(options = {}) {
       });
     } catch (err) {
       logger.warn(`Distribute step failed: ${err.message}`);
-      logger.warn('IPA is still available locally; continuing.');
+      logger.warn('Artifact is still available locally; continuing.');
     }
 
-    // Step 7: Submit (if auto-submit)
-    if (options.autoSubmit) {
+    // Step 7: Submit (if auto-submit) — not applicable to simulator builds
+    if (options.autoSubmit && isSimulator) {
+      logger.warn('--auto-submit ignored for simulator builds (nothing to submit to TestFlight).');
+      logger.step(7, 7, 'Build complete');
+      logger.success(`Simulator app saved to: ${localPath}`);
+    } else if (options.autoSubmit) {
       logger.step(7, 7, 'Submitting to TestFlight');
       await submitToTestFlight(ssh, {
         ipaPath: remotePath,
@@ -219,7 +242,7 @@ export async function buildCommand(options = {}) {
       });
     } else {
       logger.step(7, 7, 'Build complete');
-      logger.success(`IPA saved to: ${localPath}`);
+      logger.success(`${isSimulator ? 'Simulator app' : 'IPA'} saved to: ${localPath}`);
     }
 
     // Offer AMI caching after first build with no custom AMI (AWS only)

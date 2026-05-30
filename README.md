@@ -38,6 +38,8 @@ rn-deploy infra down
 | `rn-deploy setup`             | Interactive first-time setup (`deploy.config.json`)    |
 | `rn-deploy build`             | Build the app on the remote Mac                        |
 | `rn-deploy submit`            | Upload an `.ipa` to TestFlight                         |
+| `rn-deploy builds list`       | List previously published builds from the registry    |
+| `rn-deploy install`           | Install a previously published build (skip rebuilding) |
 | `rn-deploy credentials *`     | Manage App Store Connect API keys (via `asc` keychain) |
 | `rn-deploy infra up\|down\|status` | Provision / tear down EC2 Mac infrastructure       |
 
@@ -81,7 +83,29 @@ Credentials never live in plaintext. `rn-deploy` delegates to [`asc`](https://gi
 
 ## OTA distribution
 
-If you configure `storage` in `deploy.config.json` (Cloudflare R2 or S3), `rn-deploy build` will publish the signed `.ipa` to your bucket and print a QR code pointing at a self-hosted install page — useful for ad-hoc/internal distribution without TestFlight.
+If you configure `storage` in `deploy.config.json` (Cloudflare R2 or S3), `rn-deploy build` publishes the build to your bucket and prints links to a self-hosted install page — useful for ad-hoc/internal distribution without TestFlight.
+
+What's published depends on the profile's `distribution`:
+
+- **`ad-hoc` / `development`** — signed `.ipa` + `manifest.plist` + an install page with an `itms-services://` button and a terminal QR code (device install).
+- **`simulator`** — an unsigned `iphonesimulator` build, tarred (`<scheme>.app.tgz`) and uploaded. No signing, no ASC key, no provisioning needed. The install page shows a `simctl install` one-liner. Great for sharing a runnable build or driving an automated check.
+- **`app-store`** — nothing is published (TestFlight is the install channel).
+
+### Build registry
+
+Every published build also appends a record to a per-app index at `builds/<slug>/index.json` in your bucket (builds are kept forever). That powers two commands:
+
+```bash
+rn-deploy builds list           # table of prior builds for this app
+rn-deploy builds list --all     # across every app in the bucket
+
+rn-deploy install               # interactive picker → install on the host's simulator
+rn-deploy install --latest      # newest build
+rn-deploy install --version 1.0.0
+rn-deploy install --id 8f3e…    # by build id (prefix ok)
+```
+
+For a `simulator` build, `install` downloads the `.app` from the bucket onto the configured host and runs `xcrun simctl install booted` + `launch` (a simulator must be booted — e.g. via the `baguette` streamer). For an `.ipa` build it prints the device install page + QR instead.
 
 ## License
 

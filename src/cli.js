@@ -48,6 +48,34 @@ export function createCli() {
       });
     });
 
+  // Builds registry
+  const builds = program
+    .command('builds')
+    .description('Browse builds published to storage (the R2/S3 registry)');
+
+  builds
+    .command('list')
+    .description('List previously published builds for this app')
+    .option('--all', 'List builds across all apps in the bucket')
+    .action(async (options) => {
+      const { buildsListCommand } = await import('./commands/builds.js');
+      await buildsListCommand(options);
+    });
+
+  // Install — pull a previously-built artifact from storage onto a host
+  program
+    .command('install')
+    .description('Install a previously published build (skips rebuilding)')
+    .option('--id <buildId>', 'Install a specific build by id')
+    .option('--version <version>', 'Install the latest build matching a version')
+    .option('--latest', 'Install the most recent build')
+    .option('--all', 'Search builds across all apps in the bucket')
+    .option('--non-interactive', 'Require a selector flag; never prompt')
+    .action(async (options) => {
+      const { installCommand } = await import('./commands/install.js');
+      await installCommand(options);
+    });
+
   // Submit
   program
     .command('submit')

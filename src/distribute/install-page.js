@@ -120,6 +120,79 @@ export function generateInstallPage({
 `;
 }
 
+// Install page for simulator builds. There is no itms-services flow for a
+// simulator .app — instead we show a one-liner that downloads the tarball and
+// installs it on the currently-booted simulator via simctl.
+export function generateSimulatorInstallPage({
+  appTitle,
+  bundleId,
+  version,
+  buildNumber,
+  commit,
+  profile,
+  artifactUrl,
+  createdAt,
+}) {
+  const subtitle = [version, buildNumber && `(${buildNumber})`].filter(Boolean).join(' ');
+  const installCmd =
+    `curl -L "${artifactUrl}" | tar -xz && ` +
+    `xcrun simctl install booted "${appTitle}.app"` +
+    (bundleId ? ` && xcrun simctl launch booted ${bundleId}` : '');
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Install ${escapeHtml(appTitle)} (Simulator)</title>
+  <style>
+    :root { color-scheme: light dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif;
+      background: #0b0d10; color: #e7eaf0; min-height: 100vh;
+      display: flex; align-items: center; justify-content: center; padding: 32px 20px;
+    }
+    .card {
+      width: 100%; max-width: 560px; background: #15181d; border: 1px solid #23272f;
+      border-radius: 16px; padding: 28px 24px;
+    }
+    h1 { margin: 0 0 4px; font-size: 22px; }
+    .sub { color: #8b94a7; font-size: 14px; margin-bottom: 24px; }
+    .label { font-size: 12px; color: #8b94a7; margin: 18px 0 6px; text-transform: uppercase; letter-spacing: .04em; }
+    pre {
+      background: #0b0d10; border: 1px solid #23272f; border-radius: 10px;
+      padding: 14px; overflow-x: auto; font-size: 13px; color: #c8cfdc; margin: 0;
+    }
+    .meta { margin-top: 24px; font-size: 12px; color: #8b94a7; line-height: 1.6; }
+    .meta strong { color: #c8cfdc; font-weight: 500; }
+    a { color: #6c7587; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>${escapeHtml(appTitle)}</h1>
+    <div class="sub">${escapeHtml(subtitle)} · simulator build</div>
+
+    <div class="label">Install on a booted simulator</div>
+    <pre>${escapeHtml(installCmd)}</pre>
+
+    <div class="label">Or download the .app tarball</div>
+    <pre><a href="${escapeHtml(artifactUrl)}">${escapeHtml(artifactUrl)}</a></pre>
+
+    <div class="meta">
+      ${bundleId ? `<strong>Bundle</strong> ${escapeHtml(bundleId)}<br />` : ''}
+      ${profile ? `<strong>Profile</strong> ${escapeHtml(profile)}<br />` : ''}
+      ${commit ? `<strong>Commit</strong> ${escapeHtml(commit)}<br />` : ''}
+      ${createdAt ? `<strong>Built</strong> ${escapeHtml(createdAt)}<br />` : ''}
+    </div>
+  </div>
+</body>
+</html>
+`;
+}
+
 function escapeHtml(s) {
   return String(s ?? '')
     .replace(/&/g, '&amp;')

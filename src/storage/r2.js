@@ -62,6 +62,35 @@ export function createR2Adapter(config) {
       return this.publicUrlFor(key);
     },
 
+    // Read an object as a string. Returns null when the key does not exist
+    // (so callers can treat a missing index as an empty one).
+    async getString(key) {
+      try {
+        return s3(['cp', `s3://${config.bucket}/${stripLeadingSlash(key)}`, '-']);
+      } catch (err) {
+        if (/NoSuchKey|Not Found|404|does not exist/i.test(err.message)) return null;
+        throw err;
+      }
+    },
+
+    // List immediate "subdirectory" names under a prefix (CommonPrefixes).
+    // Used to enumerate app slugs under builds/.
+    async listPrefixes(prefix) {
+      const p = stripLeadingSlash(prefix).replace(/\/?$/, '/');
+      let out;
+      try {
+        out = s3(['ls', `s3://${config.bucket}/${p}`]);
+      } catch (err) {
+        if (/NoSuchKey|Not Found|404|does not exist/i.test(err.message)) return [];
+        throw err;
+      }
+      return out
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line.startsWith('PRE '))
+        .map(line => line.slice(4).replace(/\/$/, ''));
+    },
+
     // Build a remote upload command to run on the Mac instance — avoids
     // round-tripping the IPA through the local machine.
     remoteUploadCommand(remoteIpaPath, key, { contentType = 'application/octet-stream' } = {}) {
