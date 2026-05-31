@@ -89,6 +89,10 @@ With `kind: "github-actions"`:
 - The build runs on the runner via `rn-deploy run-build` (the build command, but local instead of over SSH). Copy [`templates/github/rn-deploy.yml`](./templates/github/rn-deploy.yml) into `.github/workflows/` and set `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` as repo secrets.
 - Currently supports `distribution: "simulator"` (unsigned, no Apple credentials). Signed device builds on a runner are a follow-up.
 
+`rn-deploy setup` can scaffold both workflows into `.github/workflows/` for you:
+- [`rn-deploy.yml`](./templates/github/rn-deploy.yml) — build + publish to R2 (CI).
+- [`preview.yml`](./templates/github/preview.yml) — build → R2 → install on a simulator → **baguette + a Cloudflare quick-tunnel public URL** for live manual testing. Run it from the Actions tab; the URL is live while the job is held open (`minutes` input), then the ephemeral runner is destroyed.
+
 Omitting the `host` block entirely is equivalent to `{ "kind": "aws" }`, so existing AWS configs keep working unchanged.
 
 ## Credentials

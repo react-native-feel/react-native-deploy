@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
@@ -13,7 +13,18 @@ import { ascStatus } from '../config/credentials.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const TEMPLATE_PATH = join(__dirname, '../../templates/deploy.config.json');
+const TEMPLATES_GH = join(__dirname, '../../templates/github');
 const CONFIG_FILENAME = 'deploy.config.json';
+
+// Copy GitHub Actions workflow templates into the project's .github/workflows/.
+function installWorkflowTemplates(projectDir, files) {
+  const dest = join(projectDir, '.github', 'workflows');
+  mkdirSync(dest, { recursive: true });
+  for (const f of files) {
+    copyFileSync(join(TEMPLATES_GH, f), join(dest, f));
+    logger.success(`Installed .github/workflows/${f}`);
+  }
+}
 
 export async function setupCommand() {
   const projectDir = process.cwd();
@@ -81,7 +92,17 @@ export async function setupCommand() {
       workflow: await input('Workflow file name:', 'rn-deploy.yml'),
       ref: await input('Git ref to build:', 'main'),
     };
-    logger.info('Copy templates/github/rn-deploy.yml into .github/workflows/ and set R2 secrets on the repo.');
+    const installWf = await confirm(
+      'Install GitHub Actions workflows (build/publish + live baguette preview) into .github/workflows/?',
+      true
+    );
+    if (installWf) {
+      installWorkflowTemplates(projectDir, ['rn-deploy.yml', 'preview.yml']);
+      logger.info('Next: set R2 secrets on the repo (use a bucket-scoped R2 token):');
+      logger.info('  gh secret set R2_ACCESS_KEY_ID     --repo <owner/name>');
+      logger.info('  gh secret set R2_SECRET_ACCESS_KEY --repo <owner/name>');
+      logger.info('Then run the "preview" workflow from the Actions tab for a live URL.');
+    }
   } else {
     delete template.aws;
     const macHost = await input('Mac SSH host (e.g. TX0XX.macincloud.com):');

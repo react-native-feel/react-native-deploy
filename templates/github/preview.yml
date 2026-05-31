@@ -1,0 +1,124 @@
+name: preview
+
+# Live preview on a GitHub macOS runner:
+#   build the app -> publish to R2 -> install on a simulator -> baguette +
+#   cloudflared tunnel -> a public URL you can open in a browser.
+#
+# The runner is ephemeral, so the URL lives only while the job is held open
+# (see the "minutes" input). When the job ends the runner is destroyed and
+# the URL stops working.
+#
+# Setup:
+#   1. Commit deploy.config.json with a "storage" block (accountId, bucket,
+#      publicBaseUrl) and a build profile using "distribution": "simulator".
+#   2. Add repo secrets (Settings -> Secrets and variables -> Actions):
+#        R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY
+#      Use an R2 token scoped to ONLY your bucket (least privilege).
+#   3. Run this workflow from the Actions tab (workflow_dispatch).
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: build profile from deploy.config.json
+        required: false
+        default: preview
+      minutes:
+        description: minutes to keep the preview URL alive
+        required: false
+        default: "30"
+
+jobs:
+  preview:
+    runs-on: macos-15          # Apple Silicon; baguette needs arm64/macOS 15
+    # Job cap = build time (~10 min) + the hold window. Default leaves room for
+    # a 60-min hold; raise toward GitHub's 360-min (6 h) max for longer previews.
+    timeout-minutes: 80
+    env:
+      PROFILE: ${{ inputs.profile }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Select newest Xcode
+        run: |
+          LATEST=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$LATEST" ]; then sudo xcode-select -s "$LATEST/Contents/Developer"; fi
+          xcodebuild -version
+
+      - name: Ensure AWS CLI (for R2 uploads)
+        run: which aws || brew install awscli
+
+      - name: Install rn-deploy
+        run: npm install -g rn-deploy
+
+      - name: Read deploy.config.json
+        run: |
+          node -e '
+            const c = require("./deploy.config.json");
+            const p = c.build[process.env.PROFILE];
+            if (!p) { console.error("profile not found: " + process.env.PROFILE); process.exit(1); }
+            if (p.distribution !== "simulator") { console.error("preview needs distribution=simulator"); process.exit(1); }
+            const s = c.storage || {};
+            const fs = require("fs");
+            fs.appendFileSync(process.env.GITHUB_ENV,
+              `SCHEME=${p.scheme}\nR2_BUCKET=${s.bucket}\nR2_ACCOUNT_ID=${s.accountId}\nR2_PUBLIC_BASE_URL=${s.publicBaseUrl}\n`);
+          '
+
+      - name: Build + publish to R2
+        run: rn-deploy run-build --profile "$PROFILE"
+
+      - name: Boot simulator + install the build
+        run: |
+          UDID=$(xcrun simctl list devices available --json | python3 -c "import sys,json;d=json.load(sys.stdin)['devices'];print(next(x['udid'] for rt in d for x in d[rt] if 'iPhone' in x['name'] and x['isAvailable']))")
+          xcrun simctl boot "$UDID" || true
+          tar -xzf "build/${SCHEME}.app.tgz"
+          xcrun simctl install "$UDID" "${SCHEME}.app"
+          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "${SCHEME}.app/Info.plist")
+          xcrun simctl launch "$UDID" "$BUNDLE_ID" || true
+
+      - name: Install baguette + cloudflared (standalone binaries)
+        run: |
+          VER=v0.1.3
+          mkdir -p "$HOME/.baguette/$VER"
+          curl -fL --retry 3 -o /tmp/b.tgz "https://github.com/tddworks/baguette/releases/download/$VER/baguette_${VER}_macOS_arm64.tar.gz"
+          tar -xzf /tmp/b.tgz -C "$HOME/.baguette/$VER"
+          chmod +x "$HOME/.baguette/$VER/baguette-$VER-macOS-arm64/Baguette"
+          mkdir -p "$HOME/.local/bin"
+          curl -fL --retry 3 -o /tmp/cf.tgz https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-arm64.tgz
+          tar -xzf /tmp/cf.tgz -C "$HOME/.local/bin"
+          chmod +x "$HOME/.local/bin/cloudflared"
+
+      - name: Start baguette + tunnel, publish URL
+        run: |
+          VER=v0.1.3
+          B="$HOME/.baguette/$VER/baguette-$VER-macOS-arm64/Baguette"
+          nohup "$B" serve --host 127.0.0.1 --port 8421 >/tmp/baguette.log 2>&1 &
+          sleep 3
+          nohup "$HOME/.local/bin/cloudflared" tunnel --url http://localhost:8421 >/tmp/cf.log 2>&1 &
+          URL=""
+          for i in $(seq 1 40); do
+            URL=$(grep -Eo 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/cf.log | head -1 || true)
+            [ -n "$URL" ] && break
+            sleep 2
+          done
+          if [ -z "$URL" ]; then echo "no tunnel URL"; tail -25 /tmp/cf.log; exit 1; fi
+          PREVIEW="$URL/simulators"
+          echo "PREVIEW URL: $PREVIEW"
+          # publish so it is retrievable while the job is held open (aws reads AWS_*, not R2_*)
+          printf '%s' "$PREVIEW" > /tmp/url.txt
+          AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" AWS_REGION=auto \
+            aws s3 cp /tmp/url.txt "s3://$R2_BUCKET/preview/${SCHEME}-url.txt" \
+            --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" --content-type text/plain \
+            || echo "warn: could not publish URL to R2 (continuing)"
+          { echo "## 🔗 Preview URL"; echo "[$PREVIEW]($PREVIEW)"; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Hold the runner open
+        run: |
+          MIN="${{ inputs.minutes }}"
+          echo "Holding open for ${MIN:-30} minutes..."
+          sleep $(( ${MIN:-30} * 60 ))
