@@ -1,0 +1,51 @@
+# rn-deploy GitHub Actions build workflow.
+#
+# Copy this to .github/workflows/rn-deploy.yml in your app repo. It runs a
+# simulator build on a macOS runner and publishes the .app to your storage
+# bucket via `rn-deploy run-build`.
+#
+# Required repo secrets (Settings → Secrets and variables → Actions):
+#   R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY  — storage credentials
+# Your deploy.config.json must contain the storage block (accountId, bucket,
+# publicBaseUrl) and a build profile with "distribution": "simulator".
+
+name: rn-deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Build profile from deploy.config.json
+        required: false
+        default: preview
+      message:
+        description: Optional build message
+        required: false
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install rn-deploy
+        run: npm install -g rn-deploy
+
+      - name: Build + publish (simulator)
+        id: build
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: rn-deploy run-build --profile "${{ inputs.profile }}"
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "Build id:      ${{ steps.build.outputs.build-id }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Artifact:      ${{ steps.build.outputs.artifact-url }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Install page:  ${{ steps.build.outputs.install-page-url }}" >> "$GITHUB_STEP_SUMMARY"

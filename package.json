@@ -40,7 +40,7 @@
   },
   "scripts": {
     "test": "node --test 'test/**/*.test.js'",
-    "test:e2e": "RN_DEPLOY_E2E=1 node --test test/e2e/*.test.js"
+    "test:e2e": "RN_DEPLOY_E2E=1 bash -c 'source .e2e/load-env.sh 2>/dev/null; node --test test/e2e/*.test.js'"
   },
   "dependencies": {
     "chalk": "^5.6.2",

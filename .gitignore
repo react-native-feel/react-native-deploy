@@ -5,3 +5,4 @@ node_modules/
 .tmp-test/
 .tmp-test-state/
 .e2e/credentials.env
+.claude/

@@ -133,5 +133,40 @@ describe('validateHost', () => {
   it('exports the supported kinds', () => {
     assert.ok(HOST_KINDS.includes('aws'));
     assert.ok(HOST_KINDS.includes('macincloud'));
+    assert.ok(HOST_KINDS.includes('github-actions'));
+  });
+
+  it('accepts github-actions with repo', () => {
+    assert.deepStrictEqual(
+      validateHost({ kind: 'github-actions', repo: 'bidah/app', workflow: 'rn-deploy.yml' }),
+      []
+    );
+  });
+
+  it('rejects github-actions missing repo', () => {
+    const errors = validateHost({ kind: 'github-actions', workflow: 'rn-deploy.yml' });
+    assert.ok(errors.some(e => e.includes('host.repo is required')));
+  });
+
+  it('rejects malformed github-actions repo', () => {
+    const errors = validateHost({ kind: 'github-actions', repo: 'not-a-slug', workflow: 'w.yml' });
+    assert.ok(errors.some(e => e.includes('owner/name')));
+  });
+});
+
+describe('normalizeHost github-actions', () => {
+  it('fills workflow + ref defaults', () => {
+    const config = { host: { kind: 'github-actions', repo: 'bidah/app' } };
+    normalizeHost(config);
+    assert.strictEqual(config.host.workflow, 'rn-deploy.yml');
+    assert.strictEqual(config.host.ref, 'main');
+  });
+
+  it('interpolates ${ENV} in repo', () => {
+    process.env.__TEST_GH_REPO = 'bidah/smoke';
+    const config = { host: { kind: 'github-actions', repo: '${__TEST_GH_REPO}' } };
+    normalizeHost(config);
+    assert.strictEqual(config.host.repo, 'bidah/smoke');
+    delete process.env.__TEST_GH_REPO;
   });
 });

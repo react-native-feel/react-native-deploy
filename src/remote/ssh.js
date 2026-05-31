@@ -67,6 +67,33 @@ export async function createSshConnection(hostOrOpts, privateKeyPath, retries = 
   }
 }
 
+// Managed Macs (e.g. MacinCloud) install node/pod/brew under Homebrew, but a
+// non-interactive `ssh host cmd` runs a non-login shell that never adds
+// /opt/homebrew/bin to PATH. Detect Homebrew and return a shellenv prefix so
+// commands resolve those tools. Returns '' when Homebrew isn't found.
+export async function detectShellEnvPrefix(ssh) {
+  for (const brew of ['/opt/homebrew/bin/brew', '/usr/local/bin/brew']) {
+    const r = await ssh.execCommand(`test -x ${brew} && echo ok`);
+    if (r.stdout.trim() === 'ok') return `eval "$(${brew} shellenv)"; `;
+  }
+  return '';
+}
+
+// Wrap an ssh-like object so every execCommand is prefixed (e.g. to set PATH).
+// putFile/getFile/dispose pass straight through. No-op when prefix is empty.
+export function withCommandPrefix(ssh, prefix) {
+  if (!prefix) return ssh;
+  return new Proxy(ssh, {
+    get(target, prop) {
+      if (prop === 'execCommand') {
+        return (command, opts) => target.execCommand(`${prefix}${command}`, opts);
+      }
+      const value = target[prop];
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}
+
 export async function sshExec(ssh, command, { stream = false, cwd, env } = {}) {
   logger.debug(`> ${command}`);
 

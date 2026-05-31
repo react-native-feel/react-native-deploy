@@ -51,7 +51,7 @@ Run `rn-deploy <command> --help` for full flags.
 
 ### Build host
 
-The `host` block picks where builds run. Two kinds are supported:
+The `host` block picks where builds run. Three kinds are supported:
 
 ```jsonc
 // AWS EC2 Mac — provisioned and torn down per build (default)
@@ -66,6 +66,14 @@ The `host` block picks where builds run. Two kinds are supported:
   "password": "${MAC_PASSWORD}",   // or "privateKey": "~/.ssh/id_rsa"
   "workDir": "~/rn-deploy-work"
 }
+
+// GitHub Actions — build on a macOS runner via a workflow
+"host": {
+  "kind": "github-actions",
+  "repo": "owner/name",
+  "workflow": "rn-deploy.yml",
+  "ref": "main"
+}
 ```
 
 Differences with `kind: "macincloud"`:
@@ -74,6 +82,12 @@ Differences with `kind: "macincloud"`:
 - **No sudo required** — the host is verified rather than provisioned. Xcode, Node, git, and CocoaPods must already be installed; the build fails with guidance if any are missing.
 - **Password or key auth** — set either `password` or `privateKey`.
 - **Secrets stay out of git** — any `${VAR}` in the host block is read from the environment at load time. Keep the literal `${MAC_PASSWORD}` in `deploy.config.json` and export the real value (e.g. from a gitignored `.env`).
+
+With `kind: "github-actions"`:
+
+- `rn-deploy build` dispatches the workflow with `gh`, waits for the run, then prints the published build's links. Requires the [`gh` CLI](https://cli.github.com/) authenticated locally.
+- The build runs on the runner via `rn-deploy run-build` (the build command, but local instead of over SSH). Copy [`templates/github/rn-deploy.yml`](./templates/github/rn-deploy.yml) into `.github/workflows/` and set `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` as repo secrets.
+- Currently supports `distribution: "simulator"` (unsigned, no Apple credentials). Signed device builds on a runner are a follow-up.
 
 Omitting the `host` block entirely is equivalent to `{ "kind": "aws" }`, so existing AWS configs keep working unchanged.
 

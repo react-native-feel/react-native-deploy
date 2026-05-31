@@ -76,6 +76,20 @@ export function createCli() {
       await installCommand(options);
     });
 
+  // Run-build — executes a build locally (for use inside CI, e.g. GitHub Actions)
+  program
+    .command('run-build')
+    .description('Run a build locally in the current directory (used inside CI runners)')
+    .option('--profile <name>', 'Build profile from config', 'production')
+    .option('--repo <url>', 'Git repository URL (overrides config)')
+    .option('--branch <name>', 'Branch (overrides config)')
+    .option('--scheme <name>', 'Xcode scheme (overrides config)')
+    .option('--build-type <type>', 'Build type: expo or classic')
+    .action(async (options) => {
+      const { runBuildCommand } = await import('./commands/run-build.js');
+      await runBuildCommand(options);
+    });
+
   // Submit
   program
     .command('submit')

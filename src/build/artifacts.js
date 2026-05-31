@@ -35,8 +35,11 @@ export async function findAndDownloadIpa(ssh, exportPath, localDir, scheme) {
 }
 
 export async function downloadSimulatorTarball(ssh, remoteTarballPath, localDir, scheme) {
-  const exists = await sshExec(ssh, `test -f ${remoteTarballPath} && echo yes || echo no`);
-  if (exists.stdout.trim() !== 'yes') {
+  // Resolve ~ and other shell expansions to an absolute path: SFTP (getFile)
+  // does NOT expand ~, so a workDir like "~/rn-deploy-work" would fail.
+  const resolved = (await sshExec(ssh, `ls -d ${remoteTarballPath} 2>/dev/null || true`)).stdout.trim();
+  const remoteAbs = resolved || remoteTarballPath;
+  if (!resolved) {
     throw new Error(`No simulator tarball found at ${remoteTarballPath}. Build may have failed.`);
   }
 
@@ -44,8 +47,8 @@ export async function downloadSimulatorTarball(ssh, remoteTarballPath, localDir,
   mkdirSync(localBuildDir, { recursive: true });
   const localPath = join(localBuildDir, `${scheme}.app.tgz`);
 
-  await sshDownload(ssh, remoteTarballPath, localPath);
+  await sshDownload(ssh, remoteAbs, localPath);
   logger.success(`Downloaded simulator app to ${localPath}`);
 
-  return { remotePath: remoteTarballPath, localPath };
+  return { remotePath: remoteAbs, localPath };
 }

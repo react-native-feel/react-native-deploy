@@ -59,11 +59,13 @@ export async function setupCommand() {
 
   // Strip example-only keys so they never leak into a generated config.
   delete template._host_example_macincloud_;
+  delete template._host_example_github_actions_;
   delete template._storage_example_r2_;
 
   const hostKind = await select('Where should builds run?', [
     { name: 'AWS EC2 Mac (provisioned + torn down per build)', value: 'aws' },
     { name: 'MacinCloud / existing Mac over SSH (no infra management)', value: 'macincloud' },
+    { name: 'GitHub Actions (build on a macOS runner via a workflow)', value: 'github-actions' },
   ]);
 
   if (hostKind === 'aws') {
@@ -71,6 +73,15 @@ export async function setupCommand() {
     template.aws.region = await select('AWS region?', [
       'us-east-1', 'us-east-2', 'us-west-2', 'eu-west-1', 'ap-southeast-1',
     ]);
+  } else if (hostKind === 'github-actions') {
+    delete template.aws;
+    template.host = {
+      kind: 'github-actions',
+      repo: await input('GitHub repo (owner/name):'),
+      workflow: await input('Workflow file name:', 'rn-deploy.yml'),
+      ref: await input('Git ref to build:', 'main'),
+    };
+    logger.info('Copy templates/github/rn-deploy.yml into .github/workflows/ and set R2 secrets on the repo.');
   } else {
     delete template.aws;
     const macHost = await input('Mac SSH host (e.g. TX0XX.macincloud.com):');

@@ -2,7 +2,7 @@ import { loadConfig, mergeWithFlags, validateLoadedConfig } from '../config/load
 import { resolveProfile } from '../config/profiles.js';
 import { loadState } from '../infra/state.js';
 import { infraUp, infraDown } from './infra.js';
-import { createSshConnection, sshExec, sshOptsFromHost } from '../remote/ssh.js';
+import { createSshConnection, sshExec, sshOptsFromHost, detectShellEnvPrefix, withCommandPrefix } from '../remote/ssh.js';
 import { provisionInstance, provisionManagedHost, cloneRepo } from '../remote/provision.js';
 import {
   authenticateAsc,
@@ -28,8 +28,6 @@ const TMUX_SESSION = 'rn-deploy-build';
 const TMUX_LOG = '/tmp/rn-deploy-build.log';
 
 export async function buildCommand(options = {}) {
-  await verifyPrerequisites();
-
   // Handle --resume: reconnect to existing tmux build session
   if (options.resume) {
     return resumeBuild(options);
@@ -64,8 +62,17 @@ export async function buildCommand(options = {}) {
 
   const hostKind = config.host?.kind || 'aws';
   const isManaged = hostKind === 'macincloud';
+
+  // Verify local prerequisites now that we know the host + distribution.
+  await verifyPrerequisites({ hostKind, distribution: profile.distribution });
   const totalTimeoutMs = (options.timeout || 60) * 60 * 1000;
   const buildStartTime = Date.now();
+
+  // GitHub Actions host: dispatch the workflow and wait — the build runs on the
+  // runner via `rn-deploy run-build`. We never touch SSH/infra here.
+  if (hostKind === 'github-actions') {
+    return runViaGithubActions(config, profile, profileName, options);
+  }
 
   // Step 1: Ensure infrastructure (AWS only — managed hosts already exist)
   let state = null;
@@ -74,6 +81,10 @@ export async function buildCommand(options = {}) {
     logger.step(1, 7, `Using managed host ${config.host.host}`);
     logger.step(2, 7, 'Connecting via SSH');
     ssh = await createSshConnection(sshOptsFromHost(config.host));
+    // Load Homebrew's PATH for every command (managed Macs need this for
+    // node/pod/aws on a non-login SSH shell), plus a UTF-8 locale CocoaPods needs.
+    const prefix = 'export LANG=en_US.UTF-8; ' + await detectShellEnvPrefix(ssh);
+    ssh = withCommandPrefix(ssh, prefix);
   } else {
     const { keyPairName } = config.aws;
     logger.step(1, 7, 'Provisioning infrastructure');
@@ -92,11 +103,12 @@ export async function buildCommand(options = {}) {
 
   const cloneWorkDir = isManaged ? (config.host.workDir || '~/rn-deploy-work') : '~/build-workspace';
 
+  let hostCaps = { tmux: true };
   try {
     // Step 3: Provision/verify build environment
     if (isManaged) {
       logger.step(3, 7, 'Verifying managed host toolchain');
-      await provisionManagedHost(ssh);
+      hostCaps = await provisionManagedHost(ssh);
     } else if (!config.aws.customAmiId) {
       logger.step(3, 7, 'Setting up build environment');
       await provisionInstance(ssh, {
@@ -153,7 +165,7 @@ export async function buildCommand(options = {}) {
       };
     }
 
-    // Step 4: Build inside tmux session for resilience
+    // Step 4: Build
     logger.step(4, 7, 'Building app');
     const buildSteps = profile.buildType === 'expo'
       ? getExpoBuildSteps({ scheme: profile.scheme, buildConfiguration: profile.buildConfiguration, workDir, distribution })
@@ -164,27 +176,31 @@ export async function buildCommand(options = {}) {
       .map(([k, v]) => `export ${k}="${v}"`)
       .join(' && ');
 
-    // Create a build script with all steps, run inside tmux
     const buildScript = buildSteps.map(s => `echo "=== ${s.name} ===" && ${s.cmd}`).join(' && ');
     const fullScript = envExports ? `${envExports} && ${buildScript}` : buildScript;
-
-    await sshExec(ssh, `tmux kill-session -t ${TMUX_SESSION} 2>/dev/null || true`);
-    await sshExec(ssh, `tmux new-session -d -s ${TMUX_SESSION} 'bash -c "${fullScript.replace(/"/g, '\\"')}" 2>&1 | tee ${TMUX_LOG}'`);
-
-    // Tail the log and wait for tmux session to finish
-    logger.info('Build started in tmux session. Streaming logs...');
-    const tailPromise = sshExec(ssh, `tail -f ${TMUX_LOG} &
-      while tmux has-session -t ${TMUX_SESSION} 2>/dev/null; do sleep 5; done
-      kill %1 2>/dev/null
-      # Check if build succeeded (last command exit code)
-      tail -1 ${TMUX_LOG}`, { stream: true });
 
     const timeoutPromise = new Promise((_, reject) => {
       const remaining = totalTimeoutMs - (Date.now() - buildStartTime);
       setTimeout(() => reject(new Error(`Build timed out after ${options.timeout || 60} minutes`)), remaining);
     });
 
-    await Promise.race([tailPromise, timeoutPromise]);
+    let runPromise;
+    if (hostCaps.tmux) {
+      // Run inside tmux for resilience (survives a dropped SSH connection).
+      await sshExec(ssh, `tmux kill-session -t ${TMUX_SESSION} 2>/dev/null || true`);
+      await sshExec(ssh, `tmux new-session -d -s ${TMUX_SESSION} 'bash -c "${fullScript.replace(/"/g, '\\"')}" 2>&1 | tee ${TMUX_LOG}'`);
+      logger.info('Build started in tmux session. Streaming logs...');
+      runPromise = sshExec(ssh, `tail -f ${TMUX_LOG} &
+        while tmux has-session -t ${TMUX_SESSION} 2>/dev/null; do sleep 5; done
+        kill %1 2>/dev/null
+        tail -1 ${TMUX_LOG}`, { stream: true });
+    } else {
+      // No tmux (some managed hosts): run the script directly, streaming output.
+      logger.info('tmux unavailable — running build directly (no reconnect/--resume).');
+      runPromise = sshExec(ssh, fullScript, { stream: true });
+    }
+
+    await Promise.race([runPromise, timeoutPromise]);
 
     // Step 5: Retrieve artifact
     logger.step(5, 7, 'Retrieving build artifact');
@@ -268,6 +284,32 @@ export async function buildCommand(options = {}) {
     await infraDown(options);
   } else {
     logger.info('Instance kept alive (--no-teardown). Run "rn-deploy infra down" when done.');
+  }
+}
+
+async function runViaGithubActions(config, profile, profileName, options) {
+  const { triggerGithubActionsBuild } = await import('../remote/github-actions.js');
+  await triggerGithubActionsBuild({
+    host: config.host,
+    profile: profileName,
+    message: options.message,
+  });
+
+  // Surface the build the runner just published via the registry.
+  if (config.storage) {
+    try {
+      const { createStorageAdapter } = await import('../storage/index.js');
+      const { deriveSlug, readIndex } = await import('../distribute/registry.js');
+      const storage = createStorageAdapter(config.storage);
+      const builds = await readIndex(storage, deriveSlug(config, profile));
+      if (builds[0]) {
+        logger.success('Latest build from this run:');
+        logger.info(`  Install page : ${builds[0].installPageUrl}`);
+        logger.info(`  Artifact     : ${builds[0].artifactUrl}`);
+      }
+    } catch (err) {
+      logger.warn(`Could not read build registry: ${err.message}`);
+    }
   }
 }
 

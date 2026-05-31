@@ -1,10 +1,15 @@
 import { homedir } from 'node:os';
 
-export const HOST_KINDS = ['aws', 'macincloud'];
+export const HOST_KINDS = ['aws', 'macincloud', 'github-actions'];
 
 const DEFAULT_MACINCLOUD = {
   port: 22,
   workDir: '~/rn-deploy-work',
+};
+
+const DEFAULT_GITHUB_ACTIONS = {
+  workflow: 'rn-deploy.yml',
+  ref: 'main',
 };
 
 // Replace ${VAR} references with process.env values so secrets (passwords,
@@ -38,6 +43,15 @@ export function normalizeHost(config) {
     }
   }
 
+  if (config.host.kind === 'github-actions') {
+    config.host = { ...DEFAULT_GITHUB_ACTIONS, ...config.host };
+    for (const field of ['repo', 'workflow', 'ref']) {
+      if (config.host[field] !== undefined) {
+        config.host[field] = interpolateEnv(config.host[field]);
+      }
+    }
+  }
+
   return config;
 }
 
@@ -57,6 +71,14 @@ export function validateHost(host) {
     if (host.port !== undefined && typeof host.port !== 'number') {
       errors.push('host.port must be a number');
     }
+  }
+  if (host.kind === 'github-actions') {
+    if (!host.repo) {
+      errors.push('host.repo is required for kind=github-actions (e.g. "owner/name")');
+    } else if (!/^[^/\s]+\/[^/\s]+$/.test(host.repo)) {
+      errors.push('host.repo must be in "owner/name" form');
+    }
+    if (!host.workflow) errors.push('host.workflow is required for kind=github-actions');
   }
   return errors;
 }

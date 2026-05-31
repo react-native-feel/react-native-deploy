@@ -14,6 +14,13 @@
     "workDir": "~/rn-deploy-work",
     "_comment": "Use \"privateKey\" instead of \"password\" for key auth. Values like ${MAC_PASSWORD} are read from the environment at load time so secrets stay out of git."
   },
+  "_host_example_github_actions_": {
+    "kind": "github-actions",
+    "repo": "owner/name",
+    "workflow": "rn-deploy.yml",
+    "ref": "main",
+    "_comment": "Builds run on a macOS runner. Copy templates/github/rn-deploy.yml into .github/workflows/ and set R2 secrets on the repo. Currently supports distribution: simulator."
+  },
   "aws": {
     "region": "us-east-1",
     "instanceType": "mac2.metal",
