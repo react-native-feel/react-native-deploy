@@ -51,7 +51,7 @@ Run `rn-deploy <command> --help` for full flags.
 
 ### Build host
 
-The `host` block picks where builds run. Three kinds are supported:
+The `host` block picks where builds run. Four kinds are supported:
 
 ```jsonc
 // AWS EC2 Mac — provisioned and torn down per build (default)
@@ -74,6 +74,15 @@ The `host` block picks where builds run. Three kinds are supported:
   "workflow": "rn-deploy.yml",
   "ref": "main"
 }
+
+// cua — a cloud macOS sandbox driven over the @trycua/computer SDK
+"host": {
+  "kind": "cua",
+  "name": "your-cua-sandbox-name",   // created via the cua CLI/dashboard
+  "osType": "macos",
+  "apiKey": "${CUA_API_KEY}",        // defaults to ${CUA_API_KEY}; export it
+  "workDir": "~/rn-deploy-work"
+}
 ```
 
 Differences with `kind: "macincloud"`:
@@ -88,6 +97,13 @@ With `kind: "github-actions"`:
 - `rn-deploy build` dispatches the workflow with `gh`, waits for the run, then prints the published build's links. Requires the [`gh` CLI](https://cli.github.com/) authenticated locally.
 - The build runs on the runner via `rn-deploy run-build` (the build command, but local instead of over SSH). Copy [`templates/github/rn-deploy.yml`](./templates/github/rn-deploy.yml) into `.github/workflows/` and set `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` as repo secrets.
 - Currently supports `distribution: "simulator"` (unsigned, no Apple credentials). Signed device builds on a runner are a follow-up.
+
+With `kind: "cua"`:
+
+- Builds run on a [cua](https://cua.ai) **cloud macOS sandbox**, driven over cua's TypeScript SDK (`@trycua/computer`) instead of SSH. rn-deploy connects, builds, and disconnects — it never provisions or stops the sandbox (manage its lifecycle via the cua CLI/dashboard).
+- Install the optional SDK (`npm install @trycua/computer`), create a sandbox and note its **name**, then export your `CUA_API_KEY`. Like `macincloud`, the host is verified, not provisioned — Xcode, Node, git, and CocoaPods must already be present in the sandbox image.
+- Pair it with `rn-deploy preview` for a **baguette + Cloudflare quick-tunnel public URL**: it installs the latest `distribution: "simulator"` build on the sandbox's simulator and exposes it at a live `*.trycloudflare.com` URL (the tunnel keeps running on the sandbox after the command exits).
+- Heads-up: cua's **cloud macOS** must be available on your plan — iOS builds and baguette both require a Mac, so the Linux/Windows cloud sandboxes can't run this flow.
 
 `rn-deploy setup` can scaffold both workflows into `.github/workflows/` for you:
 - [`rn-deploy.yml`](./templates/github/rn-deploy.yml) — build + publish to R2 (CI).

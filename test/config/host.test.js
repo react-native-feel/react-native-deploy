@@ -64,6 +64,22 @@ describe('normalizeHost', () => {
     delete process.env.__TEST_MAC_PW;
   });
 
+  it('fills cua defaults (osType, apiKey from CUA_API_KEY, workDir)', () => {
+    process.env.CUA_API_KEY = 'sk_cua-test';
+    const config = { host: { kind: 'cua', name: 'my-sandbox' } };
+    normalizeHost(config);
+    assert.strictEqual(config.host.osType, 'macos');
+    assert.strictEqual(config.host.apiKey, 'sk_cua-test');
+    assert.strictEqual(config.host.workDir, '~/rn-deploy-work');
+    delete process.env.CUA_API_KEY;
+  });
+
+  it('lets an explicit cua apiKey override the CUA_API_KEY default', () => {
+    const config = { host: { kind: 'cua', name: 'sb', apiKey: 'literal-key' } };
+    normalizeHost(config);
+    assert.strictEqual(config.host.apiKey, 'literal-key');
+  });
+
   it('throws when an interpolated env var is missing', () => {
     const config = {
       host: { kind: 'macincloud', host: 'h', user: 'u', password: '${__TEST_MISSING_VAR}' },
@@ -134,6 +150,25 @@ describe('validateHost', () => {
     assert.ok(HOST_KINDS.includes('aws'));
     assert.ok(HOST_KINDS.includes('macincloud'));
     assert.ok(HOST_KINDS.includes('github-actions'));
+    assert.ok(HOST_KINDS.includes('cua'));
+  });
+
+  it('accepts cua with name + apiKey', () => {
+    assert.deepStrictEqual(
+      validateHost({ kind: 'cua', name: 'my-sandbox', apiKey: 'sk_cua-x', osType: 'macos' }),
+      []
+    );
+  });
+
+  it('rejects cua missing name and apiKey', () => {
+    const errors = validateHost({ kind: 'cua' });
+    assert.ok(errors.some(e => e.includes('host.name is required')));
+    assert.ok(errors.some(e => e.includes('host.apiKey is required')));
+  });
+
+  it('rejects cua with a non-macos osType', () => {
+    const errors = validateHost({ kind: 'cua', name: 'sb', apiKey: 'k', osType: 'linux' });
+    assert.ok(errors.some(e => e.includes('host.osType must be "macos"')));
   });
 
   it('accepts github-actions with repo', () => {

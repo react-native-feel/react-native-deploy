@@ -1,6 +1,6 @@
 import { homedir } from 'node:os';
 
-export const HOST_KINDS = ['aws', 'macincloud', 'github-actions'];
+export const HOST_KINDS = ['aws', 'macincloud', 'github-actions', 'cua'];
 
 const DEFAULT_MACINCLOUD = {
   port: 22,
@@ -10,6 +10,16 @@ const DEFAULT_MACINCLOUD = {
 const DEFAULT_GITHUB_ACTIONS = {
   workflow: 'rn-deploy.yml',
   ref: 'main',
+};
+
+// cua (https://cua.ai) drives a cloud macOS sandbox over its TypeScript SDK
+// (@trycua/computer). We default osType to macos because iOS builds + baguette
+// need a Mac; apiKey defaults to the CUA_API_KEY env var so secrets stay out of
+// the committed config.
+const DEFAULT_CUA = {
+  osType: 'macos',
+  apiKey: '${CUA_API_KEY}',
+  workDir: '~/rn-deploy-work',
 };
 
 // Replace ${VAR} references with process.env values so secrets (passwords,
@@ -52,6 +62,15 @@ export function normalizeHost(config) {
     }
   }
 
+  if (config.host.kind === 'cua') {
+    config.host = { ...DEFAULT_CUA, ...config.host };
+    for (const field of ['name', 'apiKey', 'osType', 'workDir']) {
+      if (config.host[field] !== undefined) {
+        config.host[field] = interpolateEnv(config.host[field]);
+      }
+    }
+  }
+
   return config;
 }
 
@@ -70,6 +89,15 @@ export function validateHost(host) {
     }
     if (host.port !== undefined && typeof host.port !== 'number') {
       errors.push('host.port must be a number');
+    }
+  }
+  if (host.kind === 'cua') {
+    if (!host.name) errors.push('host.name is required for kind=cua (the cua sandbox name from the CLI/dashboard)');
+    if (!host.apiKey) {
+      errors.push('host.apiKey is required for kind=cua (defaults to ${CUA_API_KEY}; set that env var)');
+    }
+    if (host.osType && host.osType !== 'macos') {
+      errors.push(`host.osType must be "macos" for kind=cua (iOS builds + baguette need a Mac; got "${host.osType}")`);
     }
   }
   if (host.kind === 'github-actions') {

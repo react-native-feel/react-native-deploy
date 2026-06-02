@@ -2,7 +2,8 @@ import { loadConfig, mergeWithFlags, validateLoadedConfig } from '../config/load
 import { resolveProfile } from '../config/profiles.js';
 import { loadState } from '../infra/state.js';
 import { infraUp, infraDown } from './infra.js';
-import { createSshConnection, sshExec, sshOptsFromHost, detectShellEnvPrefix, withCommandPrefix } from '../remote/ssh.js';
+import { createSshConnection, sshExec } from '../remote/ssh.js';
+import { connectManagedHost } from '../remote/connect.js';
 import { provisionInstance, provisionManagedHost, cloneRepo } from '../remote/provision.js';
 import {
   authenticateAsc,
@@ -61,7 +62,9 @@ export async function buildCommand(options = {}) {
   }
 
   const hostKind = config.host?.kind || 'aws';
-  const isManaged = hostKind === 'macincloud';
+  // "Managed" = a host rn-deploy connects to but never provisions/tears down.
+  // macincloud is reached over SSH; cua over its cloud-sandbox WebSocket.
+  const isManaged = hostKind === 'macincloud' || hostKind === 'cua';
 
   // Verify local prerequisites now that we know the host + distribution.
   await verifyPrerequisites({ hostKind, distribution: profile.distribution });
@@ -78,13 +81,12 @@ export async function buildCommand(options = {}) {
   let state = null;
   let ssh;
   if (isManaged) {
-    logger.step(1, 7, `Using managed host ${config.host.host}`);
-    logger.step(2, 7, 'Connecting via SSH');
-    ssh = await createSshConnection(sshOptsFromHost(config.host));
-    // Load Homebrew's PATH for every command (managed Macs need this for
-    // node/pod/aws on a non-login SSH shell), plus a UTF-8 locale CocoaPods needs.
-    const prefix = 'export LANG=en_US.UTF-8; ' + await detectShellEnvPrefix(ssh);
-    ssh = withCommandPrefix(ssh, prefix);
+    const target = hostKind === 'cua' ? `cua sandbox ${config.host.name}` : `managed host ${config.host.host}`;
+    logger.step(1, 7, `Using ${target}`);
+    logger.step(2, 7, hostKind === 'cua' ? 'Connecting to cua sandbox' : 'Connecting via SSH');
+    // connectManagedHost handles both transports and applies the Homebrew
+    // shellenv + UTF-8 locale prefix every command needs on a non-login shell.
+    ssh = await connectManagedHost(config.host);
   } else {
     const { keyPairName } = config.aws;
     logger.step(1, 7, 'Provisioning infrastructure');
@@ -279,7 +281,11 @@ export async function buildCommand(options = {}) {
   // Teardown unless --no-teardown. Managed hosts are never torn down — we don't
   // own the machine's lifecycle, so just drop the connection.
   if (isManaged) {
-    logger.info('Managed host left running (not owned by rn-deploy).');
+    logger.info(
+      hostKind === 'cua'
+        ? 'cua sandbox left running (rn-deploy does not stop it — manage its lifecycle via the cua CLI/dashboard).'
+        : 'Managed host left running (not owned by rn-deploy).'
+    );
   } else if (!options.noTeardown) {
     await infraDown(options);
   } else {

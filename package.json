@@ -13,7 +13,9 @@
     "ci",
     "deploy",
     "ec2-mac",
-    "macincloud"
+    "macincloud",
+    "cua",
+    "baguette"
   ],
   "author": "Rodrigo Figueroa (https://github.com/bidah)",
   "license": "MIT",
@@ -49,5 +51,8 @@
     "node-ssh": "^13.2.1",
     "ora": "^9.3.0",
     "qrcode-terminal": "^0.12.0"
+  },
+  "optionalDependencies": {
+    "@trycua/computer": "^0.1.6"
   }
 }

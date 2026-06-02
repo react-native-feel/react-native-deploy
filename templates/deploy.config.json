@@ -21,6 +21,14 @@
     "ref": "main",
     "_comment": "Builds run on a macOS runner. Copy templates/github/rn-deploy.yml into .github/workflows/ and set R2 secrets on the repo. Currently supports distribution: simulator."
   },
+  "_host_example_cua_": {
+    "kind": "cua",
+    "name": "your-cua-sandbox-name",
+    "osType": "macos",
+    "apiKey": "${CUA_API_KEY}",
+    "workDir": "~/rn-deploy-work",
+    "_comment": "Builds run on a cua (https://cua.ai) cloud macOS sandbox over the @trycua/computer SDK. Create the sandbox via the cua CLI/dashboard, export CUA_API_KEY, and `npm i @trycua/computer`. Pairs with `rn-deploy preview` for a baguette + cloudflared live URL. Note: cua cloud macOS must be available on your plan."
+  },
   "aws": {
     "region": "us-east-1",
     "instanceType": "mac2.metal",

@@ -90,6 +90,18 @@ export function createCli() {
       await runBuildCommand(options);
     });
 
+  // Preview — baguette + cloudflared live preview of a simulator build
+  program
+    .command('preview')
+    .description('Live-preview a simulator build via baguette + a cloudflared tunnel (macincloud or cua host)')
+    .option('--slug <slug>', 'App slug to look up in the build registry')
+    .option('--artifact-url <url>', 'Simulator .app tarball URL (skips the registry lookup)')
+    .option('--port <port>', 'baguette port', String(8421))
+    .action(async (options) => {
+      const { previewCommand } = await import('./commands/preview.js');
+      await previewCommand(options);
+    });
+
   // Submit
   program
     .command('submit')
