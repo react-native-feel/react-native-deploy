@@ -1,0 +1,11 @@
+node_modules/
+build/
+.rn-build-state.json
+.rn-build/
+*.p12
+*.p8
+*.jks
+*.keystore
+*.mobileprovision
+*.csr
+*.pem
