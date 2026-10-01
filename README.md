@@ -21,8 +21,8 @@ Both read `eas.json` and `app.json`, sign with your App Store Connect API key th
 
 | | Where | What |
 |---|---|---|
-| **Dashboard & install service** | [`web/`](web/README.md) | Vite dashboard (builds, build detail, Install QR) and the Cloudflare app that serves it, the public `/install/<id>` pages (itms-services on iOS, APK on Android, QR on desktop) and the R2 upload API |
-| **rn-eas docs** | [`docs-site/`](docs-site/) | VitePress site served at `/deploy/docs/`; the command reference is generated from the CLI's spec |
+| **Dashboard & install service** | [`web/`](web/README.md) — live at [react-native-deploy.pages.dev](https://react-native-deploy.pages.dev) | Vite dashboard (builds, build detail, Install QR) and the Cloudflare Pages app that serves it, the public `/install/<id>` pages (itms-services on iOS, APK on Android, QR on desktop) and the R2 upload API |
+| **rn-eas docs** | [`docs-site/`](docs-site/) — [react-native-deploy.pages.dev/deploy/docs](https://react-native-deploy.pages.dev/deploy/docs/) | VitePress site; the command reference is generated from the CLI's spec |
 | **rn-deploy docs** | [`rnd-docs/`](rnd-docs/README.md) | Fumadocs site |
 | **Release test** | [`docs/release-testing/`](docs/release-testing/) | End-to-end test of rn-eas as a new user, bugs found and fixed |
 

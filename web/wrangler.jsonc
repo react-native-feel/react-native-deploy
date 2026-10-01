@@ -1,26 +1,21 @@
-// The deploy dashboard and the public install pages, served by one Worker.
-// `npm run deploy` builds the dashboard into .worker-assets/deploy/dashboard
-// (matching Vite's base path) and publishes it with the Worker.
+// react-native-deploy.pages.dev — the dashboard, the docs and the public install
+// pages, deployed as one Cloudflare Pages project.
+//
+// `npm run deploy` builds the dashboard into .pages-dist/deploy/dashboard and the
+// docs into .pages-dist/deploy/docs, adds .pages-dist/_worker.js (which re-exports
+// worker/index.js — Pages "advanced mode", so every request reaches it), and runs
+// `wrangler pages deploy`.
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "rn-eas-deploy",
-  "main": "worker/index.js",
+  "name": "react-native-deploy",
+  "pages_build_output_dir": "./.pages-dist",
   "compatibility_date": "2026-10-01",
-  "assets": {
-    "directory": "./.worker-assets",
-    "binding": "ASSETS",
-    // Every request reaches the Worker first: it owns /install and /api, and
-    // gives client-side dashboard routes the SPA fallback under the base path.
-    "run_worker_first": true
-  },
   "r2_buckets": [
     {
       "binding": "BUILDS",
       "bucket_name": "rn-eas-builds"
     }
-  ],
-  "observability": {
-    "enabled": true
-  }
-  // UPLOAD_TOKEN is a secret: `npx wrangler secret put UPLOAD_TOKEN`.
+  ]
+  // UPLOAD_TOKEN is a secret:
+  //   npx wrangler pages secret put UPLOAD_TOKEN --project-name react-native-deploy
 }

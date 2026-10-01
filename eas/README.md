@@ -14,7 +14,7 @@ eas submit --profile production --path build/MyApp.ipa
 
 If that looks identical to what you already run, that is the point.
 
-**Docs:** https://rn-eas-deploy.rodrigofigueroa-name.workers.dev/deploy/docs/ (source in [`../docs-site`](../docs-site)).
+**Docs:** https://react-native-deploy.pages.dev/deploy/docs/ (source in [`../docs-site`](../docs-site)).
 
 ---
 

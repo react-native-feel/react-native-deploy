@@ -8,9 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "build:worker": "vite build --outDir .worker-assets/deploy/dashboard --emptyOutDir",
-    "deploy": "npm run build:worker && npm run build:docs && wrangler deploy",
-    "build:docs": "npm --prefix ../docs-site run build && rm -rf .worker-assets/deploy/docs && cp -R ../docs-site/.vitepress/dist .worker-assets/deploy/docs"
+    "deploy": "npm run build:pages && wrangler pages deploy --project-name react-native-deploy --branch master",
+    "build:pages": "vite build --outDir .pages-dist/deploy/dashboard --emptyOutDir && npm --prefix ../docs-site run build && rm -rf .pages-dist/deploy/docs && cp -R ../docs-site/.vitepress/dist .pages-dist/deploy/docs && printf \"export { default } from '../worker/index.js';\\n\" > .pages-dist/_worker.js"
   },
   "dependencies": {
     "qrcode": "^1.5.4",

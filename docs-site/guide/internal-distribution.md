@@ -24,12 +24,12 @@ number. They are not authenticated: anyone with the link can download that build
 ### 1. Deploy the install service
 
 See [Dashboard & install service](/guide/dashboard#deploy). You end up with a URL such as
-`https://rn-eas-deploy.<you>.workers.dev` and an upload token.
+`https://<name>.pages.dev` and an upload token.
 
 ### 2. Point the repository at it
 
 ```sh
-gh variable set EAS_INSTALL_URL --body "https://rn-eas-deploy.<you>.workers.dev"
+gh variable set EAS_INSTALL_URL --body "https://<name>.pages.dev"
 gh secret set EAS_INSTALL_TOKEN < upload_token     # the Worker's UPLOAD_TOKEN, from a file
 ```
 

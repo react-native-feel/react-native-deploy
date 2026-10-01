@@ -1,6 +1,7 @@
 # Dashboard & install service
 
-The `web/` package is two things deployed together as one Cloudflare Worker:
+The `web/` package is deployed as one Cloudflare Pages project — for this repository,
+**[react-native-deploy.pages.dev](https://react-native-deploy.pages.dev)**:
 
 | Path | What it is |
 |---|---|
@@ -22,32 +23,48 @@ Until you connect, the dashboard shows clearly-labelled demo data.
 
 ## Deploy
 
-You need a Cloudflare account, logged in with `npx wrangler login`.
+You need a Cloudflare account, logged in with `npx wrangler login`. Pick a project name; it
+becomes `<name>.pages.dev`. The commands below use `react-native-deploy`.
 
 ```sh
 cd web
 npm install
-npx wrangler r2 bucket create rn-eas-builds        # once
+npx wrangler r2 bucket create rn-eas-builds                     # once
+npx wrangler pages project create react-native-deploy \
+  --production-branch master --force                            # once (see below)
 
 # once: the token the build workflow uploads with
 openssl rand -hex 32 | tr -d '\n' > upload_token
-npx wrangler secret put UPLOAD_TOKEN < upload_token
+npx wrangler pages secret put UPLOAD_TOKEN --project-name react-native-deploy < upload_token
 
-npm run deploy      # builds dashboard + docs, then deploys the Worker
+npm run deploy      # builds dashboard + docs, then `wrangler pages deploy`
 ```
 
-`npm run deploy` prints the Worker's URL, for example
-`https://rn-eas-deploy.<you>.workers.dev`. Then connect your app repository to it:
+Then connect your app repository to it:
 
 ```sh
-gh variable set EAS_INSTALL_URL --body "https://rn-eas-deploy.<you>.workers.dev"
+gh variable set EAS_INSTALL_URL --body "https://react-native-deploy.pages.dev"
 gh secret set EAS_INSTALL_TOKEN < upload_token
 rm upload_token
 ```
 
-The configuration is in `web/wrangler.jsonc`: Workers static assets for the dashboard and docs,
-an R2 binding named `BUILDS`, and `run_worker_first` so the Worker can route `/install` and
-`/api` and give the dashboard's client-side routes a fallback.
+::: warning Three things that catch people out
+- **Secrets apply to the next deployment.** `pages secret put` doesn't change the running
+  deployment; run `npm run deploy` again after setting or rotating `UPLOAD_TOKEN`. Until then,
+  uploads get `401`.
+- **`--force` on `project create`.** Recent wrangler versions turn `pages project create` into a
+  Workers deployment (a `*.workers.dev` URL) unless you pass `--force`. Only `project create`
+  needs it.
+- **Accounts allow 100 Pages projects.** `project create` fails with code `8000027` at the limit;
+  delete an unused project first. Projects with custom domains must have those removed before
+  they can be deleted.
+:::
+
+The configuration is `web/wrangler.jsonc`: the build output directory and an R2 binding named
+`BUILDS`. `npm run deploy` writes `.pages-dist/_worker.js`, which re-exports `web/worker/index.js`:
+Pages "advanced mode", so every request reaches the Worker code. It routes `/install` and `/api`,
+serves the dashboard and docs from the static assets, and gives the dashboard's client-side routes
+a fallback.
 
 ## How uploads work
 

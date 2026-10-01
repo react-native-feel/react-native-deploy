@@ -20,8 +20,8 @@ fixed and B1 at least has a clear error** — B12 breaks the second TestFlight u
 | 3 | **Provisioning keys**: distribution cert + App Store profile into repo secrets | ⚠️ Pass — **manual**; the CLI has no way to add credentials |
 | 4 | **TestFlight**: signed production build → `eas submit` with the ASC API key | ✅ Pass — after fix B11 |
 | 5 | **QR install of preview builds** on a registered device (EAS internal distribution) | 🟡 Built, verified up to the phone — awaiting a scan on a physical iPhone |
-| 6 | **Hosted dashboard** on Cloudflare (Vite app + install pages) | ✅ Pass — https://rn-eas-deploy.rodrigofigueroa-name.workers.dev |
-| 7 | **CLI docs site** | ✅ Live — https://rn-eas-deploy.rodrigofigueroa-name.workers.dev/deploy/docs/ |
+| 6 | **Hosted dashboard** on Cloudflare (Vite app + install pages) | ✅ Pass — https://react-native-deploy.pages.dev (Cloudflare Pages) |
+| 7 | **CLI docs site** | ✅ Live — https://react-native-deploy.pages.dev/deploy/docs/ |
 
 The CLI's own suite went from 548 → **555 passing tests** (7 new regression tests, 1 corrected expectation); the dashboard's from 29 → **38**.
 Every bug below that was fixed was found by the live run, not by the existing suite — the suite
@@ -263,7 +263,7 @@ asc profiles create --bundle <bundleIdRes> --certificate <distCert> --device <de
   --profile-type IOS_APP_ADHOC --name "RN Deploy Test AdHoc"                   # → 784577S665
 base64 -i adhoc.mobileprovision | gh secret set EAS_IOS_PROFILE_INTERNAL
 gh secret set EAS_INSTALL_TOKEN < upload_token         # same value as the Worker's UPLOAD_TOKEN
-gh variable set EAS_INSTALL_URL --body https://rn-eas-deploy.rodrigofigueroa-name.workers.dev
+gh variable set EAS_INSTALL_URL --body https://react-native-deploy.pages.dev
 eas credentials                                        # ✔ EAS_IOS_PROFILE_INTERNAL, ✔ EAS_INSTALL_TOKEN
 ```
 
@@ -303,6 +303,17 @@ Caveats to put in the README:
   set; fine for sideloading, not for Play.
 
 ## Flow 6 — Hosted dashboard on Cloudflare (added 2026-10-01)
+
+> **Moved to Cloudflare Pages (later on 2026-10-01).** Flows 5–7 were tested on a Worker at
+> `rn-eas-deploy.rodrigofigueroa-name.workers.dev`. The same code now runs as the Pages project
+> **`react-native-deploy`** — `web/worker/index.js` re-exported as `_worker.js` (advanced mode),
+> same R2 bucket — at **https://react-native-deploy.pages.dev**; links in this report point there,
+> and every build published earlier resolves at the new host. Re-verified there: all routes and
+> guards (incl. upload 401/400), desktop QR, IPA streaming, and a fresh workflow publish. The old
+> Worker was deleted. Getting the name took freeing account slots: the account was at the
+> 100-Pages-project limit (`8000027`); 4 unused `my-app-*` projects were deleted at the owner's
+> request (6 others have custom domains and were left alone), and recent wrangler converts
+> `pages project create` into a Workers deploy unless given `--force`.
 
 **Before:** `reactnativefeel.com/deploy/dashboard/` returned 404 and the repo had no Cloudflare
 configuration; the dashboard only ran under `npm run dev`.
@@ -405,7 +416,7 @@ them. The README listed `--auto-submit` as supported; corrected. Also: `validate
 | Apple Developer | bundle id `com.bidah.testrndeployapp` (`B4ZA7LF68K`), iOS Distribution cert `3QW9FZ7559` (key only in the scratch dir + repo secret), App Store profile `MDM8G8ZXGZ` |
 | App Store Connect | app "RN Deploy Test" `6817907751` (SKU `rn-deploy-test`), internal TestFlight group "rn-eas QA" |
 | Apple Developer (Flow 5) | ad-hoc profile `38F5TK7KBQ` "RN Deploy Test AdHoc" (device: iPhone 16 `3KXB754D94`); the first one, `784577S665` (iPhone 7), was deleted |
-| Cloudflare | Worker `rn-eas-deploy` (workers.dev) with secret `UPLOAD_TOKEN`; R2 bucket `rn-eas-builds` |
+| Cloudflare | Pages project `react-native-deploy` (react-native-deploy.pages.dev) with secret `UPLOAD_TOKEN`; R2 bucket `rn-eas-builds`. The interim Workers `rn-eas-deploy` and `react-native-deploy` were deleted; Pages projects `my-app-97wuq3f`, `my-app-9qsx4pg`, `my-app-srr4eaa`, `my-app-ujwv554` deleted to free slots |
 | GitHub (Flow 5) | secrets `EAS_IOS_PROFILE_INTERNAL`, `EAS_INSTALL_TOKEN`; variable `EAS_INSTALL_URL` |
 
 Revoke cert `3QW9FZ7559` and delete the repo when the test app is no longer needed.

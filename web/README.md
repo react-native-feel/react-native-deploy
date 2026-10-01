@@ -1,15 +1,25 @@
 # Deploy dashboard
 
 The web half of the EAS replacement — a reproduction of expo.dev's deploy
-screens, served at **reactnativefeel.com/deploy/dashboard**.
-(`/deploy` itself is the marketing page, which lives in the `chatbot-factory-ui` repo.)
+screens — plus the install service behind its QR codes. Live at
+**[react-native-deploy.pages.dev](https://react-native-deploy.pages.dev)**:
+
+| Path | What |
+|---|---|
+| `/deploy/dashboard/` | this dashboard |
+| `/deploy/docs/` | the rn-eas docs ([`../docs-site`](../docs-site)) |
+| `/install/<dispatch-id>` | public install page for one internal build (`worker/`) |
+| `/api/uploads/…` | token-guarded R2 upload API for the build workflow (`worker/`) |
 
 ```bash
 npm install
 npm run dev      # http://localhost:5177/deploy/dashboard/
-npm run build    # static output in dist/, base-pathed at /deploy/dashboard/
-npm test
+npm test         # mapper + install-service tests
+npm run deploy   # build dashboard + docs, then `wrangler pages deploy`
 ```
+
+First-time Cloudflare setup (R2 bucket, Pages project, `UPLOAD_TOKEN`) is in the docs:
+[Dashboard & install service](https://react-native-deploy.pages.dev/deploy/docs/guide/dashboard#deploy).
 
 ## What it shows
 
@@ -51,13 +61,15 @@ Crypto's digest is async.
 
 `base: '/deploy/dashboard/'` in `vite.config.js` and a matching router `basename` are both
 required — getting one wrong produces a page that works in dev and 404s every
-chunk in production. The build output is static; point the path at `dist/` with
-an SPA fallback so `/deploy/dashboard/builds/:id` resolves on a hard refresh.
+chunk in production. `worker/index.js` gives `/deploy/dashboard/builds/:id` its SPA
+fallback on a hard refresh (and keeps missing hashed assets as real 404s).
 
 ## Tests
 
-`npm test` runs 29 tests over the mapper: status translation for every GitHub
+`npm test` runs 40 tests. 29 cover the mapper: status translation for every GitHub
 conclusion, build id stability and UUID shape, EAS's build titles, and the
 invariants the views depend on — that a failed build has a diagnosable error
 code, that nothing succeeds after a failing step, and that the phase timings sum
-to the reported build time.
+to the reported build time. The other 11 cover the install service
+(`worker/install.test.js`): upload-key validation, manifest escaping, the
+itms-services URL, the per-device install page and its desktop QR code.

@@ -1,5 +1,5 @@
 node_modules/
 dist/
-.worker-assets
+.pages-dist
 .wrangler
 .dev.vars
