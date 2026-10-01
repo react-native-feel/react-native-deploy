@@ -1,0 +1,27 @@
+{
+  "name": "rn-eas",
+  "version": "0.1.0",
+  "description": "A drop-in EAS replacement: the same `eas` commands and the same eas.json, with builds running on GitHub Actions runners and store delivery handled by the asc CLI.",
+  "type": "module",
+  "bin": {
+    "eas": "./bin/eas.js"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\""
+  },
+  "dependencies": {
+    "@babel/code-frame": "^7.26.2",
+    "chalk": "^5.6.2",
+    "commander": "^14.0.3",
+    "env-string": "^1.0.1",
+    "golden-fleece": "^1.0.9",
+    "joi": "^17.13.3",
+    "libsodium-wrappers": "^0.7.15",
+    "semver": "^7.6.3"
+  },
+  "license": "ISC",
+  "devDependencies": {
+    "@expo/eas-json": "^24.5.0",
+    "eas-cli": "^24.6.0"
+  }
+}

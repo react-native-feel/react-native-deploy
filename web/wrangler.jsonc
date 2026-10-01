@@ -1,0 +1,26 @@
+// The deploy dashboard and the public install pages, served by one Worker.
+// `npm run deploy` builds the dashboard into .worker-assets/deploy/dashboard
+// (matching Vite's base path) and publishes it with the Worker.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "rn-eas-deploy",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./.worker-assets",
+    "binding": "ASSETS",
+    // Every request reaches the Worker first: it owns /install and /api, and
+    // gives client-side dashboard routes the SPA fallback under the base path.
+    "run_worker_first": true
+  },
+  "r2_buckets": [
+    {
+      "binding": "BUILDS",
+      "bucket_name": "rn-eas-builds"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+  // UPLOAD_TOKEN is a secret: `npx wrangler secret put UPLOAD_TOKEN`.
+}

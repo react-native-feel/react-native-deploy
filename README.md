@@ -1,3 +1,48 @@
+# react-native-deploy
+
+Ship React Native and Expo apps — builds, TestFlight, and installs on test devices — without
+owning a Mac. This repository holds two build CLIs that read the same `eas.json`, plus the
+dashboard and install service they share.
+
+| | **`rn-eas`** ([`eas/`](eas/README.md)) | **`rn-deploy`** (this directory, [below](#rn-deploy)) |
+|---|---|---|
+| In one line | The same `eas` commands, running on **GitHub Actions** | An EAS-compatible pipeline on **a Mac you point it at** |
+| Where builds run | GitHub-hosted `macos-26` / `ubuntu-latest` runners in your repo | AWS EC2 Mac (provisioned per build), MacinCloud or any SSH-reachable Mac, a cua cloud sandbox, or a GitHub runner (simulator builds) |
+| Command surface | Drop-in for `eas-cli`'s build/submit commands and flags (contract-tested) | `rn-deploy setup` / `build` / `submit` / `infra` / `install` |
+| Signing | Repo secrets; ad-hoc profile for internal builds | `asc` keychain + signing fetch/sync on the host |
+| Android | Yes (`.apk` / `.aab`) | No |
+| Pay for | GitHub Actions minutes (free on public repos) | the Mac: EC2 host time, a MacinCloud rental, … |
+| Pick it when | you want `eas build` without Expo's servers | you already rent a Mac, or need a full Mac rather than a runner |
+
+Both read `eas.json` and `app.json`, sign with your App Store Connect API key through
+[`asc`](https://github.com/rork/asc), and upload to TestFlight.
+
+## Shared pieces
+
+| | Where | What |
+|---|---|---|
+| **Dashboard & install service** | [`web/`](web/README.md) | Vite dashboard (builds, build detail, Install QR) and the Cloudflare app that serves it, the public `/install/<id>` pages (itms-services on iOS, APK on Android, QR on desktop) and the R2 upload API |
+| **rn-eas docs** | [`docs-site/`](docs-site/) | VitePress site served at `/deploy/docs/`; the command reference is generated from the CLI's spec |
+| **rn-deploy docs** | [`rnd-docs/`](rnd-docs/README.md) | Fumadocs site |
+| **Release test** | [`docs/release-testing/`](docs/release-testing/) | End-to-end test of rn-eas as a new user, bugs found and fixed |
+
+```bash
+cd eas && npm install && npm test          # rn-eas CLI
+cd web && npm install && npm test          # dashboard + install service
+npm test                                   # rn-deploy (repo root)
+```
+
+## Other tools in this repo
+
+Smaller, independent tools that predate the two CLIs and solve adjacent problems:
+
+| | Where | What |
+|---|---|---|
+| **`rn-build`** | [`gh-build/`](gh-build/README.md) | The direct ancestor of `rn-eas`: GitHub Actions builds with its own `rn-build.config.json` instead of `eas.json` |
+| **`rn-preview`** | [`sim-preview/`](sim-preview/README.md) | A booted iOS Simulator on a rented Mac (MacinCloud), streamed to your browser with `baguette` |
+
+---
+
 # rn-deploy
 
 Build React Native iOS apps on a remote Mac (AWS EC2 Mac or MacinCloud) and ship them to TestFlight, the App Store, or via OTA install pages — without owning a Mac.

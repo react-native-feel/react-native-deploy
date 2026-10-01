@@ -1,0 +1,41 @@
+{
+  "github": {
+    "repo": "",
+    "ref": "main"
+  },
+  "ios": {
+    "bundleId": "",
+    "scheme": "",
+    "teamId": "",
+    "profileName": ""
+  },
+  "android": {
+    "package": "",
+    "module": "app"
+  },
+  "build": {
+    "production": {
+      "platform": "all",
+      "buildType": "expo",
+      "buildConfiguration": "Release",
+      "distribution": "app-store",
+      "gradleTask": "bundleRelease",
+      "nodeVersion": "20",
+      "packageManager": "npm",
+      "iosRunner": "macos-15",
+      "androidRunner": "ubuntu-latest",
+      "env": {}
+    },
+    "preview": {
+      "extends": "production",
+      "distribution": "ad-hoc",
+      "gradleTask": "assembleRelease"
+    },
+    "development": {
+      "extends": "production",
+      "buildConfiguration": "Debug",
+      "distribution": "development",
+      "gradleTask": "assembleDebug"
+    }
+  }
+}

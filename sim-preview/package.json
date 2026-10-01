@@ -1,0 +1,15 @@
+{
+  "name": "rn-preview",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "rn-preview": "./bin/rn-preview.js"
+  },
+  "scripts": {},
+  "dependencies": {
+    "chalk": "^5.6.2",
+    "commander": "^14.0.3",
+    "node-ssh": "^13.2.1",
+    "ora": "^9.3.0"
+  }
+}
