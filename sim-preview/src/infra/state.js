@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, unlinkSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-const STATE_FILE = '.mac-vnc-state.json';
+const STATE_FILE = '.rn-preview-state.json';
 
 export function loadState(dir = process.cwd()) {
   const path = join(dir, STATE_FILE);

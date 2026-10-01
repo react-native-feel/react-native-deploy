@@ -1,6 +1,10 @@
-# aws-mac-vnc
+# rn-preview
 
-Stream an iOS Simulator from a remote Mac (e.g. MacinCloud) to a browser on your laptop. Two backends:
+**Preview loop.** Stream an iOS Simulator from a remote Mac (e.g. MacinCloud) to a browser on your laptop, so you can look at the app without owning a Mac.
+
+> Sibling project: [`rn-deploy`](../README.md) at the repo root is the **release loop** — it builds a signed `.ipa` on an AWS EC2 Mac and ships it to TestFlight. The two tools are independent: different Macs, different config, no shared code. See the root README for which one to reach for.
+
+Two backends:
 
 - **`baguette`** — modern HTTP/H.264 path. Self-contained web UI, no VNC, no sudo. Recommended.
 - **`stream`** — legacy VNC + websockify + noVNC frontend. Kept for hosts where baguette can't run.
@@ -17,12 +21,12 @@ This README covers the baguette flow end-to-end. Both flows assume a MacinCloud 
 - Apple Silicon (`arm64`)
 - macOS 15+
 - Xcode 26+ with iOS Simulator runtimes
-- An iOS simulator named in `MAC_VNC_DEVICE` already created in Xcode (the script will create one if missing, but it's faster if it exists)
+- An iOS simulator named in `RN_PREVIEW_DEVICE` already created in Xcode (the script will create one if missing, but it's faster if it exists)
 
 ## One-time setup
 
 ```bash
-cd aws-mac-vnc
+cd sim-preview
 npm install
 cp .env.example .env
 # edit .env — paste your MacinCloud host/user/password
@@ -87,7 +91,7 @@ ssh -L 8421:localhost:8421 user945049@TX079.macincloud.com
 
 **Tunnel command "hangs"** — That's correct. The SSH session is the tunnel; it must stay alive. Open `http://localhost:8421/simulators` in your **local** browser (not inside the SSH session — that would try to launch a browser on the remote, which has no GUI session).
 
-**Port 8421 already in use locally** — Another process on your laptop has the port. Either kill it (`lsof -iTCP:8421 -sTCP:LISTEN`) or pick a different port via `MAC_VNC_BAGUETTE_PORT` in `.env` and use it on both ends.
+**Port 8421 already in use locally** — Another process on your laptop has the port. Either kill it (`lsof -iTCP:8421 -sTCP:LISTEN`) or pick a different port via `RN_PREVIEW_BAGUETTE_PORT` in `.env` and use it on both ends.
 
 **`baguette serve` doesn't start** — On the remote: `tail -n 50 /tmp/baguette.log` for diagnostics.
 
@@ -106,22 +110,29 @@ Same `.env` file. Routes traffic via websockify on port 6080 and the React/noVNC
 ## Layout
 
 ```
-aws-mac-vnc/
+sim-preview/
 ├── bin/
-│   ├── baguette.sh        # baguette flow entrypoint (sources .env)
+│   ├── baguette.sh        # baguette flow entrypoint
 │   ├── tunnel.sh          # opens SSH tunnel + browser
 │   ├── connect.sh         # legacy VNC flow entrypoint
-│   └── mac-vnc.js         # Node CLI (commander)
+│   ├── _env.sh            # shared .env loading (RN_PREVIEW_*, MAC_VNC_* fallback)
+│   └── rn-preview.js      # Node CLI (commander)
 ├── src/
 │   ├── cli.js             # registers `stream`, `baguette`, `status` commands
 │   ├── commands/
 │   │   ├── baguette.js    # baguette orchestration
 │   │   └── stream.js      # legacy VNC orchestration + status
 │   └── remote/
-│       ├── ssh.js         # node-ssh wrapper with retry
+│       ├── ssh.js         # node-ssh wrapper with retry (password or key auth)
 │       ├── baguette-setup.js   # download/install/boot/serve over SSH
 │       └── vnc-setup.js   # legacy VNC + websockify setup
 ├── frontend/              # React/noVNC viewer (only used by `stream`)
 ├── .env.example
 └── package.json
 ```
+
+State is written to `.rn-preview-state.json` (gitignored) in whichever directory you run from.
+
+## Note on naming
+
+This package used to be called `aws-mac-vnc` / `mac-vnc`. Both halves of that name had gone stale: it targets MacinCloud rather than AWS, and the recommended backend is baguette over HTTP rather than VNC. Variables are now `RN_PREVIEW_*`; `bin/_env.sh` still accepts the old `MAC_VNC_*` spelling, so an existing `.env` needs no edits.

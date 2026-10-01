@@ -5,28 +5,18 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-ENV_FILE="$PROJECT_DIR/.env"
+# shellcheck source=bin/_env.sh
+source "$SCRIPT_DIR/_env.sh"
 
-if [[ ! -f "$ENV_FILE" ]]; then
-  echo "error: $ENV_FILE not found — copy .env.example to .env and fill in your MacinCloud creds" >&2
-  exit 1
-fi
+require_env RN_PREVIEW_HOST
+require_env RN_PREVIEW_USER
+require_env RN_PREVIEW_PASSWORD
 
-set -a
-# shellcheck disable=SC1090
-source "$ENV_FILE"
-set +a
-
-: "${MAC_VNC_HOST:?MAC_VNC_HOST missing in .env}"
-: "${MAC_VNC_USER:?MAC_VNC_USER missing in .env}"
-: "${MAC_VNC_PASSWORD:?MAC_VNC_PASSWORD missing in .env}"
-
-PORT="${MAC_VNC_BAGUETTE_PORT:-8421}"
-SSH_PORT="${MAC_VNC_SSH_PORT:-22}"
+PORT="${RN_PREVIEW_BAGUETTE_PORT:-8421}"
+SSH_PORT="${RN_PREVIEW_SSH_PORT:-22}"
 URL="http://localhost:${PORT}/simulators"
 
-echo "Opening tunnel ${PORT} -> ${MAC_VNC_HOST}:${PORT} ..."
+echo "Opening tunnel ${PORT} -> ${RN_PREVIEW_HOST}:${PORT} ..."
 echo "Once connected, your local browser can reach: ${URL}"
 echo ""
 
@@ -38,11 +28,11 @@ echo ""
 # will prompt for the password interactively — both keep the foreground SSH session
 # alive for as long as you want the tunnel open.
 if command -v sshpass >/dev/null 2>&1; then
-  exec sshpass -p "$MAC_VNC_PASSWORD" ssh \
+  exec sshpass -p "$RN_PREVIEW_PASSWORD" ssh \
     -o StrictHostKeyChecking=accept-new \
     -p "$SSH_PORT" \
     -L "${PORT}:localhost:${PORT}" \
-    "${MAC_VNC_USER}@${MAC_VNC_HOST}"
+    "${RN_PREVIEW_USER}@${RN_PREVIEW_HOST}"
 else
   echo "(sshpass not installed — you'll be prompted for the Mac password)"
   echo "  Install once with: brew install hudochenkov/sshpass/sshpass"
@@ -51,5 +41,5 @@ else
     -o StrictHostKeyChecking=accept-new \
     -p "$SSH_PORT" \
     -L "${PORT}:localhost:${PORT}" \
-    "${MAC_VNC_USER}@${MAC_VNC_HOST}"
+    "${RN_PREVIEW_USER}@${RN_PREVIEW_HOST}"
 fi

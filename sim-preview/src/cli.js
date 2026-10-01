@@ -10,9 +10,9 @@ export function createCli() {
   const program = new Command();
 
   program
-    .name('mac-vnc')
+    .name('rn-preview')
     .version(pkg.version)
-    .description('Stream iOS Simulator from a remote Mac to browser via VNC');
+    .description('Stream an iOS Simulator from a remote Mac to your browser (baguette over HTTP, or legacy VNC)');
 
   program
     .command('stream')

@@ -1,9 +1,9 @@
 {
-  "name": "mac-vnc",
+  "name": "rn-preview",
   "version": "0.1.0",
   "type": "module",
   "bin": {
-    "mac-vnc": "./bin/mac-vnc.js"
+    "rn-preview": "./bin/rn-preview.js"
   },
   "scripts": {},
   "dependencies": {

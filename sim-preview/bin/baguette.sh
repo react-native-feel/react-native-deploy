@@ -1,34 +1,26 @@
 #!/usr/bin/env bash
+# Sets up and starts baguette on the remote Mac (install, boot simulator, serve on
+# 127.0.0.1:8421), then disconnects. Run ./bin/tunnel.sh next to reach it.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-ENV_FILE="$PROJECT_DIR/.env"
+# shellcheck source=bin/_env.sh
+source "$SCRIPT_DIR/_env.sh"
 
-if [[ ! -f "$ENV_FILE" ]]; then
-  echo "error: $ENV_FILE not found — copy .env.example to .env and fill in your MacinCloud creds" >&2
-  exit 1
-fi
-
-set -a
-# shellcheck disable=SC1090
-source "$ENV_FILE"
-set +a
-
-: "${MAC_VNC_HOST:?MAC_VNC_HOST missing in .env}"
-: "${MAC_VNC_USER:?MAC_VNC_USER missing in .env}"
-: "${MAC_VNC_PASSWORD:?MAC_VNC_PASSWORD missing in .env}"
+require_env RN_PREVIEW_HOST
+require_env RN_PREVIEW_USER
+require_env RN_PREVIEW_PASSWORD
 
 args=(
   baguette
-  --host "$MAC_VNC_HOST"
-  --user "$MAC_VNC_USER"
-  --password "$MAC_VNC_PASSWORD"
-  --ssh-port "${MAC_VNC_SSH_PORT:-22}"
-  --port "${MAC_VNC_BAGUETTE_PORT:-8421}"
+  --host "$RN_PREVIEW_HOST"
+  --user "$RN_PREVIEW_USER"
+  --password "$RN_PREVIEW_PASSWORD"
+  --ssh-port "${RN_PREVIEW_SSH_PORT:-22}"
+  --port "${RN_PREVIEW_BAGUETTE_PORT:-8421}"
 )
 
-[[ -n "${MAC_VNC_DEVICE:-}" ]] && args+=(--device "$MAC_VNC_DEVICE")
-[[ -n "${MAC_VNC_RUNTIME:-}" ]] && args+=(--runtime "$MAC_VNC_RUNTIME")
+[[ -n "${RN_PREVIEW_DEVICE:-}" ]] && args+=(--device "$RN_PREVIEW_DEVICE")
+[[ -n "${RN_PREVIEW_RUNTIME:-}" ]] && args+=(--runtime "$RN_PREVIEW_RUNTIME")
 
-exec node "$SCRIPT_DIR/mac-vnc.js" "${args[@]}" "$@"
+exec node "$SCRIPT_DIR/rn-preview.js" "${args[@]}" "$@"

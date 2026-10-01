@@ -1,5 +1,5 @@
 node_modules/
-.mac-vnc-state.json
+.rn-preview-state.json
 .env
 frontend/node_modules/
 frontend/dist/
