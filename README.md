@@ -1,5 +1,38 @@
 # react-native-deploy
 
+**An EAS replacement.** The same `eas` commands, the same `eas.json`, builds on
+GitHub Actions runners, store delivery through the [`asc`](https://github.com/rork/asc)
+CLI, and a dashboard that reproduces expo.dev's deploy screens.
+
+```bash
+eas build --platform ios --profile production
+eas submit --profile production --path build/MyApp.ipa
+```
+
+| | Where it lives | What it is |
+|---|---|---|
+| **`eas`** | [`eas/`](eas/README.md) | The CLI. Drop-in for `eas-cli`'s build and submit surface, verified against `eas-cli`'s own manifest and `@expo/eas-json` off npm. |
+| **Dashboard** | [`web/`](web/README.md) | The Vite dashboard plus the Cloudflare Worker that serves it, the docs and the QR install pages. |
+| **Docs** | [`docs-site/`](docs-site/) | The VitePress documentation site, served at `/deploy/docs/` by the same Worker. The command reference is generated from the CLI's spec. |
+
+Compatibility is a tested property, not a claim: 548 CLI tests and 29 web tests,
+including a differential suite that runs every `eas.json` fixture through both
+this implementation and the real `@expo/eas-json` and asserts they agree.
+
+```bash
+cd eas && npm install && npm test
+cd ../web && npm install && npm test
+```
+
+---
+
+## Earlier tools in this repo
+
+The three tools below predate the `eas` CLI and are kept because they solve
+adjacent problems it does not. `rn-build` in particular is the direct ancestor of
+`eas/` — same idea, its own config format instead of `eas.json`.
+
+
 Three independent command-line tools for shipping a React Native app without owning a Mac. They cover different parts of the workflow and share no code — pick the one that matches what you're trying to do.
 
 | | **`rn-build`** ([`gh-build/`](gh-build/README.md)) | **`rn-deploy`** (this directory) | **`rn-preview`** ([`sim-preview/`](sim-preview/README.md)) |
