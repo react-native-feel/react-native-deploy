@@ -1,10 +1,10 @@
 {
   "name": "@react-native-feel/deploy",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "React Native Deploy: the eas build/submit commands and your eas.json, with builds running on GitHub Actions runners and store delivery handled by the asc CLI.",
   "type": "module",
   "bin": {
-    "rnd": "./dist/bin/rnd.js"
+    "rnd": "dist/bin/rnd.js"
   },
   "files": [
     "dist",
