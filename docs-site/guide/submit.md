@@ -1,11 +1,11 @@
 # Submitting to TestFlight
 
-`eas submit` uploads an `.ipa` to App Store Connect with [`asc`](https://github.com/rork/asc),
+`rnd submit` uploads an `.ipa` to App Store Connect with [`asc`](https://github.com/rork/asc),
 waits for Apple to process it, and adds it to TestFlight groups.
 
 ## Before the first submission
 
-1. **An App Store Connect API key in `asc`:** `asc auth login`. `eas submit` uses `asc`'s default
+1. **An App Store Connect API key in `asc`:** `asc auth login`. `rnd submit` uses `asc`'s default
    key unless the submit profile names one (below).
 2. **An app record.** Apple has no API for creating apps: create it once at
    [App Store Connect → Apps → +](https://appstoreconnect.apple.com/apps) with your bundle id.
@@ -39,10 +39,10 @@ waits for Apple to process it, and adds it to TestFlight groups.
 ## Submitting
 
 ```sh
-eas build -p ios -e production
-eas build:download -p ios
+rnd build -p ios -e production
+rnd build:download -p ios
 cd build && unzip *.zip && cd ..
-eas submit -p ios --profile production --path build/MyApp.ipa \
+rnd submit -p ios --profile production --path build/MyApp.ipa \
   --what-to-test "Checkout flow rewrite"
 ```
 
@@ -53,11 +53,11 @@ What happens:
    added to a group. This usually takes a few minutes.
 3. The build is added to each group, and the TestFlight link is printed.
 
-`eas submit` without `--path` finds your latest store build and tells you the two commands to
+`rnd submit` without `--path` finds your latest store build and tells you the two commands to
 download it: `asc` uploads local files only.
 
 ```sh
-eas submit:status -p ios        # live App Store version and recent TestFlight builds
+rnd submit:status -p ios        # live App Store version and recent TestFlight builds
 ```
 
 ## Getting it onto a phone

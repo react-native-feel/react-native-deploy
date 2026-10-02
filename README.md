@@ -4,7 +4,7 @@ Ship React Native and Expo apps — builds, TestFlight, and installs on test dev
 owning a Mac. This repository holds two build CLIs that read the same `eas.json`, plus the
 dashboard and install service they share.
 
-| | **`rn-eas`** ([`eas/`](eas/README.md)) | **`rn-deploy`** (this directory, [below](#rn-deploy)) |
+| | **`rnd`** ([`eas/`](eas/README.md)) | **`rn-deploy`** (this directory, [below](#rn-deploy)) |
 |---|---|---|
 | In one line | The same `eas` commands, running on **GitHub Actions** | An EAS-compatible pipeline on **a Mac you point it at** |
 | Where builds run | GitHub-hosted `macos-26` / `ubuntu-latest` runners in your repo | AWS EC2 Mac (provisioned per build), MacinCloud or any SSH-reachable Mac, a cua cloud sandbox, or a GitHub runner (simulator builds) |

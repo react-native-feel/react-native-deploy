@@ -212,7 +212,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${P12:-}" ]; then
-            echo "::error::No iOS signing credentials in repo secrets. Run 'eas credentials' to check."
+            echo "::error::No iOS signing credentials in repo secrets. Run 'rnd credentials' to check."
             exit 1
           fi
           # An App Store profile cannot sign an ad-hoc export and vice versa, so
@@ -220,7 +220,7 @@ jobs:
           if [ '${{ steps.plan.outputs.export_method }}' = 'ad-hoc' ]; then
             PROFILE="${PROFILE_INTERNAL:-}"
             if [ -z "$PROFILE" ]; then
-              echo "::error::Internal iOS builds need an ad-hoc provisioning profile with your test devices in the EAS_IOS_PROFILE_INTERNAL secret. Run 'eas credentials' to check."
+              echo "::error::Internal iOS builds need an ad-hoc provisioning profile with your test devices in the EAS_IOS_PROFILE_INTERNAL secret. Run 'rnd credentials' to check."
               exit 1
             fi
           else

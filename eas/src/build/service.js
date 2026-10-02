@@ -137,7 +137,7 @@ export class BuildService {
     throw new Error(
       `The build was dispatched but no matching run appeared within ${Math.round(timeoutMs / 1000)}s.\n` +
         `This usually means .github/workflows/${WORKFLOW_FILE} on "${ref}" is out of date and no ` +
-        'longer stamps the dispatch id into its run-name. Run "eas build:configure" and push the workflow.'
+        'longer stamps the dispatch id into its run-name. Run "rnd build:configure" and push the workflow.'
     );
   }
 

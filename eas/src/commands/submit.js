@@ -43,7 +43,7 @@ export async function submit({ options }) {
     if (platform === 'android') {
       die(
         'Android submission is not wired up yet — it needs a Google Play service account, not asc. ' +
-          'Use "--platform ios" for now; the .aab from "eas build" uploads to Play Console unchanged.'
+          'Use "--platform ios" for now; the .aab from "rnd build" uploads to Play Console unchanged.'
       );
     }
 
@@ -137,12 +137,12 @@ async function resolveArchive({ project, options, platform }) {
     die(
       options.id
         ? `No build found with id "${options.id}".`
-        : 'No store build found to submit. Run "eas build --profile production" first, or pass --path.'
+        : 'No store build found to submit. Run "rnd build --profile production" first, or pass --path.'
     );
   }
   die(
     `Build ${build.id} lives on GitHub Actions as a zipped artifact, which asc cannot upload directly.\n` +
-      `Download and unzip it first:\n  eas build:download --build-id ${build.id}\n  eas submit --path build/<name>.ipa`
+      `Download and unzip it first:\n  rnd build:download --build-id ${build.id}\n  rnd submit --path build/<name>.ipa`
   );
 }
 

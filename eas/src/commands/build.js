@@ -21,7 +21,7 @@ function context() {
   const project = loadProjectContext();
   if (!project.hasEasJson) {
     die(
-      'eas.json could not be found in this project. Run "eas build:configure" to create one.'
+      'eas.json could not be found in this project. Run "rnd build:configure" to create one.'
     );
   }
   const accessor = EasJsonAccessor.fromProjectPath(project.projectRoot);
@@ -111,7 +111,7 @@ export async function build({ options }) {
 
   if (!options.wait) {
     Log.log('');
-    Log.log('Not waiting for the build to finish (--no-wait). Re-attach with "eas build:list".');
+    Log.log('Not waiting for the build to finish (--no-wait). Re-attach with "rnd build:list".');
     return;
   }
 
@@ -142,7 +142,7 @@ async function waitForBuilds({ service, builds, output, pollMs = 10_000 }) {
     process.exitCode = 1;
   }
   if (output) {
-    Log.log(`Artifacts are downloadable with "eas build:download --build-id <id> --output ${output}".`);
+    Log.log(`Artifacts are downloadable with "rnd build:download --build-id <id> --output ${output}".`);
   }
 }
 

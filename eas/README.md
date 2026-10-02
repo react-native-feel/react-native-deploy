@@ -1,18 +1,18 @@
-# rn-eas
+# @react-native-feel/deploy (`rnd`)
 
-**A drop-in EAS replacement.** The same `eas` commands, reading the same
+**A drop-in EAS replacement.** The `eas` commands as `rnd`, reading the same
 `eas.json`, with builds running on GitHub Actions runners and store delivery
 handled by the [`asc`](https://github.com/rork/asc) CLI. No Expo account, no
 Expo servers, no per-build fee — the compute is billed to your GitHub account
 and the signing assets stay in your repo's secrets.
 
 ```bash
-eas build --platform ios --profile production
-eas build:list --json
-eas submit --profile production --path build/MyApp.ipa
+rnd build --platform ios --profile production
+rnd build:list --json
+rnd submit --profile production --path build/MyApp.ipa
 ```
 
-If that looks identical to what you already run, that is the point.
+Apart from the command name, that is what you already run with `eas`. That is the point.
 
 **Docs:** https://react-native-deploy.pages.dev/deploy/docs/ (source in [`../docs-site`](../docs-site)).
 
@@ -42,20 +42,20 @@ was written.
 ## How it works
 
 ```
-eas build  ──►  resolve eas.json profile   (same resolver as EAS)
+rnd build  ──►  resolve eas.json profile   (same resolver as EAS)
            ──►  translate to runner switches (distribution → export method, …)
            ──►  workflow_dispatch  ──►  GitHub Actions runner
            ──►  poll the run, download the artifact
 
-eas submit ──►  resolve submit profile
+rnd submit ──►  resolve submit profile
            ──►  asc builds upload  ──►  App Store Connect
            ──►  asc builds add-groups  ──►  TestFlight
 ```
 
 There is no server in the middle. **A build *is* a workflow run** — its status,
-its artifacts, its step timings. `eas build:list` reads the GitHub Actions API
+its artifacts, its step timings. `rnd build:list` reads the GitHub Actions API
 and projects each run onto EAS's `BuildFragment` shape, which is why
-`eas build:list --json` can be piped into anything that already understood EAS.
+`rnd build:list --json` can be piped into anything that already understood EAS.
 
 Build ids are a SHA-256 of `repo#runId`, formatted as a v4-shaped UUID. They are
 stable, need nothing persisted, and are derived identically in Node and in the
@@ -67,9 +67,8 @@ rather than `node:crypto`, precisely so the dashboard computes the same id.
 ## Install
 
 ```bash
-cd eas
-npm install
-npm link        # puts `eas` on your PATH
+npm install -g @react-native-feel/deploy   # puts `rnd` on your PATH
+# or, without installing: npx @react-native-feel/deploy <command>
 ```
 
 Prerequisites: Node 20+, a GitHub repo holding your app, and `asc` for anything
@@ -80,14 +79,14 @@ touching the App Store.
 ```bash
 cd ~/code/my-app
 
-eas login              # stores a GitHub token at ~/.eas-gh/auth.json (0600)
-eas build:configure    # writes eas.json + .github/workflows/eas-build.yml
+rnd login              # stores a GitHub token at ~/.eas-gh/auth.json (0600)
+rnd build:configure    # writes eas.json + .github/workflows/eas-build.yml
 git add .github && git commit -m "add build workflow" && git push
-eas build --platform ios --profile development
+rnd build --platform ios --profile development
 ```
 
 If you already have an `eas.json`, skip `build:configure` and go straight to
-`eas build` — that file is the input, not something this tool rewrites.
+`rnd build` — that file is the input, not something this tool rewrites.
 
 ---
 
@@ -96,7 +95,7 @@ If you already have an `eas.json`, skip `build:configure` and go straight to
 Every field in EAS's build and submit schemas is parsed and validated, including
 the parts that are easy to get subtly wrong:
 
-- **JSON5.** Comments and trailing commas are accepted, and `eas build:configure`
+- **JSON5.** Comments and trailing commas are accepted, and `rnd build:configure`
   patches the file in place rather than reserialising it, so your comments survive.
 - **`extends` chains**, capped at five deep, with `env` and the platform blocks
   merged rather than replaced.
@@ -107,7 +106,7 @@ the parts that are easy to get subtly wrong:
 - **Schema defaults**: `credentialsSource: "remote"`, `distribution: "store"`,
   `track: "internal"`, `language: "en-US"`, and the rest.
 
-`eas config --platform ios --profile production` prints what a profile actually
+`rnd config --platform ios --profile production` prints what a profile actually
 resolves to, which is usually not what the file looks like.
 
 ### How profiles reach the runner
@@ -137,33 +136,33 @@ Everything below takes the same flags as `eas-cli`, verified against its manifes
 
 | Command | Notes |
 |---|---|
-| `eas build` | `-p/--platform`, `-e/--profile`, `--wait/--no-wait`, `--clear-cache`, `-m/--message`, `--json`, … (`--auto-submit` is accepted but not implemented yet) |
-| `eas build:list` | All of EAS's filters, including the camelCase aliases |
-| `eas build:view [ID]` | Accepts a full id, an id prefix, or a raw run id |
-| `eas build:cancel [ID]` | Stops the run, and the billing with it |
-| `eas build:download` | Pulls the artifact zip |
-| `eas build:configure` | Writes `eas.json` and the workflow |
-| `eas submit` (alias `eas build:submit`) | Uploads via `asc`, adds TestFlight groups |
-| `eas submit:status` | Live version and recent TestFlight builds |
-| `eas credentials` | Reports which signing secrets the repo holds |
-| `eas config` | The resolved profile |
-| `eas project:info` | What this tool sees in your project |
-| `eas login` / `logout` / `whoami` | The stored GitHub token |
+| `rnd build` | `-p/--platform`, `-e/--profile`, `--wait/--no-wait`, `--clear-cache`, `-m/--message`, `--json`, … (`--auto-submit` is accepted but not implemented yet) |
+| `rnd build:list` | All of EAS's filters, including the camelCase aliases |
+| `rnd build:view [ID]` | Accepts a full id, an id prefix, or a raw run id |
+| `rnd build:cancel [ID]` | Stops the run, and the billing with it |
+| `rnd build:download` | Pulls the artifact zip |
+| `rnd build:configure` | Writes `eas.json` and the workflow |
+| `rnd submit` (alias `rnd build:submit`) | Uploads via `asc`, adds TestFlight groups |
+| `rnd submit:status` | Live version and recent TestFlight builds |
+| `rnd credentials` | Reports which signing secrets the repo holds |
+| `rnd config` | The resolved profile |
+| `rnd project:info` | What this tool sees in your project |
+| `rnd login` / `logout` / `whoami` | The stored GitHub token |
 
-Commands that only make sense against Expo's servers — `eas update`, `eas env`,
-`eas secret`, `eas workflow:run`, `eas deploy` — are recognised and answered with
+Commands that only make sense against Expo's servers — `rnd update`, `rnd env`,
+`rnd secret`, `rnd workflow:run`, `rnd deploy` — are recognised and answered with
 what to use instead, rather than an "unknown command".
 
 ### Deliberate differences
 
-- **`eas build --local` is refused.** The whole point is that the macOS runner is
+- **`rnd build --local` is refused.** The whole point is that the macOS runner is
   GitHub's.
-- **`eas submit --url` is refused.** `asc` uploads from a local file; download the
+- **`rnd submit --url` is refused.** `asc` uploads from a local file; download the
   archive first.
 - **Android submission is not wired up.** It needs a Google Play service account
-  rather than `asc`. The `.aab` from `eas build` uploads to the Play Console
+  rather than `asc`. The `.aab` from `rnd build` uploads to the Play Console
   unchanged in the meantime.
-- **`eas build:version:set` is refused.** Versions live in your app config, not on
+- **`rnd build:version:set` is refused.** Versions live in your app config, not on
   a server — edit `app.json` or set `autoIncrement` on the profile.
 
 ---
@@ -214,7 +213,7 @@ Ubuntu is 4–8 and effectively free.
 
 ```
 eas/
-├── bin/eas.js
+├── bin/rnd.js
 ├── src/
 │   ├── easjson/      faithful port of @expo/eas-json (schema, resolvers, accessor)
 │   ├── cli/          declarative command spec + commander program

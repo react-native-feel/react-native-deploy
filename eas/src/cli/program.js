@@ -76,7 +76,7 @@ export function createProgram({ version = '0.1.0' } = {}) {
   const program = new Command();
 
   program
-    .name('eas')
+    .name('rnd')
     .description(
       'Build and submit React Native apps — the EAS command surface, running on ' +
         'GitHub Actions runners and the App Store Connect CLI.'
@@ -123,8 +123,8 @@ export function createProgram({ version = '0.1.0' } = {}) {
       .action(() => {
         process.exitCode = 1;
         console.error(
-          `"eas ${name}" is not part of this replacement: ${reason}.\n` +
-            'Run "eas --help" for the commands that are supported.'
+          `"rnd ${name}" is not part of this replacement: ${reason}.\n` +
+            'Run "rnd --help" for the commands that are supported.'
         );
       });
   }

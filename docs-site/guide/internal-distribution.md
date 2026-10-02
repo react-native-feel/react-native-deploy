@@ -1,7 +1,7 @@
 # Internal distribution (QR install)
 
 An **internal** build (`distribution: "internal"`) is meant for your own and your testers'
-devices. rn-eas publishes it to an **install service**, a small Cloudflare Worker you deploy
+devices. React Native Deploy publishes it to an **install service**, a small Cloudflare Worker you deploy
 once. The dashboard's **Install** button shows a QR code; a tester scans it and gets an install
 page:
 
@@ -10,7 +10,7 @@ page:
 - **A computer:** the link to open on the device, and on Android a direct download.
 
 ```
-eas build -e preview ─► runner signs with your ad-hoc profile
+rnd build -e preview ─► runner signs with your ad-hoc profile
                      ─► uploads app.ipa / app.apk and meta.json to the install service (R2)
 dashboard → Install  ─► QR → https://<worker>/install/<dispatch-id>
 phone                ─► Install → manifest.plist → app.ipa
@@ -42,7 +42,7 @@ iOS installs an internal build only on devices listed in its **ad-hoc provisioni
 That profile lives in its own secret, because an App Store profile cannot sign an ad-hoc export.
 
 ```sh
-eas device:list                    # name, model and UDID of each registered device
+rnd device:list                    # name, model and UDID of each registered device
 asc profiles create \
   --bundle <bundle-id-resource-id> \
   --certificate <distribution-certificate-id> \
@@ -52,7 +52,7 @@ asc profiles create \
   | python3 -c 'import json,sys,base64; d=json.load(sys.stdin)["data"]; open("adhoc.mobileprovision","wb").write(base64.b64decode(d["attributes"]["profileContent"]))'
 
 base64 -i adhoc.mobileprovision | gh secret set EAS_IOS_PROFILE_INTERNAL
-eas credentials -p ios             # ✔ EAS_IOS_PROFILE_INTERNAL
+rnd credentials -p ios             # ✔ EAS_IOS_PROFILE_INTERNAL
 ```
 
 Use the same distribution certificate as your store builds ([Credentials](/guide/credentials)).
@@ -60,14 +60,14 @@ Use the same distribution certificate as your store builds ([Credentials](/guide
 ::: danger Check the model, not just the name
 Two devices can share a name. If the profile holds a different phone from the one you install
 on, iOS refuses with only *"This app cannot be installed because its integrity could not be
-verified."* `eas device:list` shows the model next to each name. The phone's own UDID is under
+verified."* `rnd device:list` shows the model next to each name. The phone's own UDID is under
 Finder → the device → click the serial number, or `xcrun devicectl device info details --device <id>`.
 :::
 
 ## Building and installing
 
 ```sh
-eas build -p all -e preview
+rnd build -p all -e preview
 ```
 
 The build's log and its GitHub run summary end with **📲 Install this build** and the link. In

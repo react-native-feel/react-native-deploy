@@ -1,13 +1,13 @@
 # eas.json support
 
-`eas.json` is the input. rn-eas parses and validates every field in EAS's build and submit
+`eas.json` is the input. React Native Deploy parses and validates every field in EAS's build and submit
 schemas, using a port of `@expo/eas-json` that a differential test suite holds against the real
 package.
 
 ## What is supported
 
 - **JSON5.** Comments and trailing commas are fine. If an `eas.json` exists,
-  `eas build:configure` leaves it untouched, comments included.
+  `rnd build:configure` leaves it untouched, comments included.
 - **`extends`** chains, up to five deep. `env` and the platform blocks are merged, not replaced.
 - **Platform overrides.** A top-level field with an `ios` or `android` block that overrides it
   resolves exactly as EAS resolves it.
@@ -51,8 +51,8 @@ package.
 ## Seeing what a profile resolves to
 
 ```sh
-eas config --platform ios --profile preview
-eas config -p android -e production --json
+rnd config --platform ios --profile preview
+rnd config -p android -e production --json
 ```
 
 The effective profile is often not what the file looks like, once `extends`, platform blocks and

@@ -8,20 +8,20 @@ outline: [2, 3]
 
 Every command below takes the same flags as `eas-cli`: a contract test compares this
 table with `eas-cli`'s own `oclif.manifest.json`. The quoted line is `eas-cli`'s
-description; **In rn-eas** says what the command does here.
+description; **In rnd** says what the command does here.
 
 Global options: `--help` on any command, `--version` on `eas`.
 
 ## Build
 
-### `eas build` {#eas-build}
+### `rnd build` {#eas-build}
 
 > start a build
 
-**In rn-eas:** Resolves the profile from `eas.json`, checks it can be built, and dispatches `.github/workflows/eas-build.yml` on GitHub Actions. iOS runs on `macos-26`, Android on `ubuntu-latest`. Internal builds are published to the [install service](/guide/internal-distribution) when it is configured. `--local` is refused: the point is that the Mac is GitHub's. See [Building](/guide/building).
+**In rnd:** Resolves the profile from `eas.json`, checks it can be built, and dispatches `.github/workflows/eas-build.yml` on GitHub Actions. iOS runs on `macos-26`, Android on `ubuntu-latest`. Internal builds are published to the [install service](/guide/internal-distribution) when it is configured. `--local` is refused: the point is that the Mac is GitHub's. See [Building](/guide/building).
 
 ```sh
-eas build [flags]
+rnd build [flags]
 ```
 
 | Flag | Default | Description |
@@ -43,14 +43,14 @@ eas build [flags]
 | `--json` |  | Enable JSON output. |
 | `--non-interactive` |  | Run the command in non-interactive mode. |
 
-### `eas build:list` {#eas-build-list}
+### `rnd build:list` {#eas-build-list}
 
 > list all builds for your project
 
-**In rn-eas:** Reads workflow runs from the GitHub Actions API and maps each onto EAS's `BuildFragment` shape, so `--json` output can be piped into anything that understood EAS. Build ids are a SHA-256 of `repo#runId`, formatted as a UUID.
+**In rnd:** Reads workflow runs from the GitHub Actions API and maps each onto EAS's `BuildFragment` shape, so `--json` output can be piped into anything that understood EAS. Build ids are a SHA-256 of `repo#runId`, formatted as a UUID.
 
 ```sh
-eas build:list [flags]
+rnd build:list [flags]
 ```
 
 | Flag | Default | Description |
@@ -73,28 +73,28 @@ eas build:list [flags]
 | `--non-interactive` |  | Run the command in non-interactive mode. |
 | `--simulator` |  | Filter only iOS simulator builds. |
 
-### `eas build:view` {#eas-build-view}
+### `rnd build:view` {#eas-build-view}
 
 > view a build for your project
 
-**In rn-eas:** Accepts a full build id, a unique id prefix, or a raw GitHub run id.
+**In rnd:** Accepts a full build id, a unique id prefix, or a raw GitHub run id.
 
 ```sh
-eas build:view [BUILD_ID] [flags]
+rnd build:view [BUILD_ID] [flags]
 ```
 
 | Flag | Default | Description |
 |---|---|---|
 | `--json` |  | Enable JSON output. |
 
-### `eas build:cancel` {#eas-build-cancel}
+### `rnd build:cancel` {#eas-build-cancel}
 
 > cancel a build
 
-**In rn-eas:** Cancels the workflow run, which also stops the runner minutes being billed.
+**In rnd:** Cancels the workflow run, which also stops the runner minutes being billed.
 
 ```sh
-eas build:cancel [BUILD_ID] [flags]
+rnd build:cancel [BUILD_ID] [flags]
 ```
 
 | Flag | Default | Description |
@@ -103,14 +103,14 @@ eas build:cancel [BUILD_ID] [flags]
 | `-p, --platform <android\|ios\|all>` |  | Platform to build for. |
 | `-e, --profile <value>` |  | Name of the build profile from eas.json. Defaults to "production" if defined in eas.json. |
 
-### `eas build:download` {#eas-build-download}
+### `rnd build:download` {#eas-build-download}
 
 > download a simulator/emulator build by build ID or fingerprint hash
 
-**In rn-eas:** Downloads the build's artifact zip into `./build`. Without `--build-id` it takes the latest build for `--platform`. GitHub always wraps artifacts in a zip: unzip it to get the `.ipa`, `.apk`, `.aab` or simulator `.tar.gz`.
+**In rnd:** Downloads the build's artifact zip into `./build`. Without `--build-id` it takes the latest build for `--platform`. GitHub always wraps artifacts in a zip: unzip it to get the `.ipa`, `.apk`, `.aab` or simulator `.tar.gz`.
 
 ```sh
-eas build:download [flags]
+rnd build:download [flags]
 ```
 
 | Flag | Default | Description |
@@ -123,28 +123,28 @@ eas build:download [flags]
 | `--json` |  | Enable JSON output. |
 | `--non-interactive` |  | Run the command in non-interactive mode. |
 
-### `eas build:configure` {#eas-build-configure}
+### `rnd build:configure` {#eas-build-configure}
 
 > configure the project to support EAS Build
 
-**In rn-eas:** Writes a starter `eas.json` and `.github/workflows/eas-build.yml`. It does not set `ios.bundleIdentifier` or `android.package`; add them to `app.json` yourself. Commit and push the workflow before the first build.
+**In rnd:** Writes a starter `eas.json` and `.github/workflows/eas-build.yml`. It does not set `ios.bundleIdentifier` or `android.package`; add them to `app.json` yourself. Commit and push the workflow before the first build.
 
 ```sh
-eas build:configure [flags]
+rnd build:configure [flags]
 ```
 
 | Flag | Default | Description |
 |---|---|---|
 | `-p, --platform <android\|ios\|all>` |  | Platform to build for. |
 
-### `eas build:version:get` {#eas-build-version-get}
+### `rnd build:version:get` {#eas-build-version-get}
 
 > get the latest version from EAS servers
 
-**In rn-eas:** Reads `ios.buildNumber` and `android.versionCode` from `app.json`; there is no version server.
+**In rnd:** Reads `ios.buildNumber` and `android.versionCode` from `app.json`; there is no version server.
 
 ```sh
-eas build:version:get [flags]
+rnd build:version:get [flags]
 ```
 
 | Flag | Default | Description |
@@ -154,14 +154,14 @@ eas build:version:get [flags]
 | `--json` |  | Enable JSON output. |
 | `--non-interactive` |  | Run the command in non-interactive mode. |
 
-### `eas build:version:set` {#eas-build-version-set}
+### `rnd build:version:set` {#eas-build-version-set}
 
 > update version of an app
 
-**In rn-eas:** Refused: versions live in your app config, not on a server. Edit `version`, `ios.buildNumber` and `android.versionCode` in `app.json`.
+**In rnd:** Refused: versions live in your app config, not on a server. Edit `version`, `ios.buildNumber` and `android.versionCode` in `app.json`.
 
 ```sh
-eas build:version:set [flags]
+rnd build:version:set [flags]
 ```
 
 | Flag | Default | Description |
@@ -172,16 +172,16 @@ eas build:version:set [flags]
 
 ## Submit
 
-### `eas submit` {#eas-submit}
+### `rnd submit` {#eas-submit}
 
-Alias: `eas build:submit`
+Alias: `rnd build:submit`
 
 > submit app binary to App Store and/or Play Store
 
-**In rn-eas:** Uploads a local `.ipa` to App Store Connect with `asc builds upload`, waits for processing when TestFlight groups are requested, then adds the build to the profile's `groups`. `--url` is refused (asc uploads local files) and Android submission is not wired up yet. See [Submitting to TestFlight](/guide/submit).
+**In rnd:** Uploads a local `.ipa` to App Store Connect with `asc builds upload`, waits for processing when TestFlight groups are requested, then adds the build to the profile's `groups`. `--url` is refused (asc uploads local files) and Android submission is not wired up yet. See [Submitting to TestFlight](/guide/submit).
 
 ```sh
-eas submit [flags]
+rnd submit [flags]
 ```
 
 | Flag | Default | Description |
@@ -200,14 +200,14 @@ eas submit [flags]
 | `--non-interactive` |  | Run the command in non-interactive mode. |
 | `--[no-]auto-testflight-setup` |  |  |
 
-### `eas submit:list` {#eas-submit-list}
+### `rnd submit:list` {#eas-submit-list}
 
 > list submissions for your project
 
-**In rn-eas:** Submission history is not stored locally; this shows recent TestFlight builds from App Store Connect.
+**In rnd:** Submission history is not stored locally; this shows recent TestFlight builds from App Store Connect.
 
 ```sh
-eas submit:list [flags]
+rnd submit:list [flags]
 ```
 
 | Flag | Default | Description |
@@ -219,14 +219,14 @@ eas submit:list [flags]
 | `--json` |  | Enable JSON output. |
 | `--non-interactive` |  | Run the command in non-interactive mode. |
 
-### `eas submit:view` {#eas-submit-view}
+### `rnd submit:view` {#eas-submit-view}
 
 > view a submission for your project
 
-**In rn-eas:** Shows recent TestFlight builds from App Store Connect.
+**In rnd:** Shows recent TestFlight builds from App Store Connect.
 
 ```sh
-eas submit:view [SUBMISSION_ID] [flags]
+rnd submit:view [SUBMISSION_ID] [flags]
 ```
 
 | Flag | Default | Description |
@@ -234,14 +234,14 @@ eas submit:view [SUBMISSION_ID] [flags]
 | `-p, --platform <android\|ios\|all>` |  | Platform to build for. |
 | `--json` |  | Enable JSON output. |
 
-### `eas submit:status` {#eas-submit-status}
+### `rnd submit:status` {#eas-submit-status}
 
 > show the status of your app on the App Store: the live version and TestFlight builds
 
-**In rn-eas:** The live App Store version and recent TestFlight builds with their processing state.
+**In rnd:** The live App Store version and recent TestFlight builds with their processing state.
 
 ```sh
-eas submit:status [flags]
+rnd submit:status [flags]
 ```
 
 | Flag | Default | Description |
@@ -251,14 +251,14 @@ eas submit:status [flags]
 | `--json` |  | Enable JSON output. |
 | `--non-interactive` |  | Run the command in non-interactive mode. |
 
-### `eas submit:cancel` {#eas-submit-cancel}
+### `rnd submit:cancel` {#eas-submit-cancel}
 
 > cancel a submission
 
-**In rn-eas:** Refused: an App Store Connect upload cannot be cancelled once started. Remove the build from its TestFlight groups instead.
+**In rnd:** Refused: an App Store Connect upload cannot be cancelled once started. Remove the build from its TestFlight groups instead.
 
 ```sh
-eas submit:cancel [SUBMISSION_ID] [flags]
+rnd submit:cancel [SUBMISSION_ID] [flags]
 ```
 
 | Flag | Default | Description |
@@ -269,28 +269,28 @@ eas submit:cancel [SUBMISSION_ID] [flags]
 
 ## Project & credentials
 
-### `eas credentials` {#eas-credentials}
+### `rnd credentials` {#eas-credentials}
 
 > manage credentials
 
-**In rn-eas:** Reports which signing secrets the repository holds. It does not create or upload them yet; see [Credentials](/guide/credentials) for the setup.
+**In rnd:** Reports which signing secrets the repository holds. It does not create or upload them yet; see [Credentials](/guide/credentials) for the setup.
 
 ```sh
-eas credentials [flags]
+rnd credentials [flags]
 ```
 
 | Flag | Default | Description |
 |---|---|---|
 | `-p, --platform <android\|ios>` |  | Platform to build for. |
 
-### `eas config` {#eas-config}
+### `rnd config` {#eas-config}
 
 > display project configuration (app.json + eas.json)
 
-**In rn-eas:** Prints the build and submit profile after `extends`, platform blocks and schema defaults are applied: what the runner actually receives.
+**In rnd:** Prints the build and submit profile after `extends`, platform blocks and schema defaults are applied: what the runner actually receives.
 
 ```sh
-eas config [flags]
+rnd config [flags]
 ```
 
 | Flag | Default | Description |
@@ -300,27 +300,27 @@ eas config [flags]
 | `--json` |  | Enable JSON output. |
 | `--non-interactive` |  | Run the command in non-interactive mode. |
 
-### `eas project:info` {#eas-project-info}
+### `rnd project:info` {#eas-project-info}
 
 > information about the current project
 
-**In rn-eas:** What the CLI sees: app identifiers, GitHub repository, branch, managed vs bare, lockfile, and whether `eas.json` exists.
+**In rnd:** What the CLI sees: app identifiers, GitHub repository, branch, managed vs bare, lockfile, and whether `eas.json` exists.
 
 ```sh
-eas project:info
+rnd project:info
 ```
 
 
 ## Devices
 
-### `eas device:list` {#eas-device-list}
+### `rnd device:list` {#eas-device-list}
 
 > list all registered devices for your account
 
-**In rn-eas:** Lists devices registered on your Apple Developer account through `asc`, with name, model and UDID.
+**In rnd:** Lists devices registered on your Apple Developer account through `asc`, with name, model and UDID.
 
 ```sh
-eas device:list [flags]
+rnd device:list [flags]
 ```
 
 | Flag | Default | Description |
@@ -331,41 +331,41 @@ eas device:list [flags]
 | `--json` |  | Enable JSON output. |
 | `--non-interactive` |  | Run the command in non-interactive mode. |
 
-### `eas device:create` {#eas-device-create}
+### `rnd device:create` {#eas-device-create}
 
 > register new Apple Devices to use for internal distribution
 
-**In rn-eas:** Prints the `asc devices create` command to run. After registering a device, regenerate the ad-hoc profile and rebuild. See [Internal distribution](/guide/internal-distribution#adding-a-device).
+**In rnd:** Prints the `asc devices create` command to run. After registering a device, regenerate the ad-hoc profile and rebuild. See [Internal distribution](/guide/internal-distribution#adding-a-device).
 
 ```sh
-eas device:create
+rnd device:create
 ```
 
 
 ## Account
 
-### `eas account:view` {#eas-account-view}
+### `rnd account:view` {#eas-account-view}
 
-Alias: `eas whoami`
+Alias: `rnd whoami`
 
 > show the username you are logged in as
 
-**In rn-eas:** Shows the GitHub user the stored token belongs to, and its scopes.
+**In rnd:** Shows the GitHub user the stored token belongs to, and its scopes.
 
 ```sh
-eas account:view
+rnd account:view
 ```
 
-### `eas account:login` {#eas-account-login}
+### `rnd account:login` {#eas-account-login}
 
-Alias: `eas login`
+Alias: `rnd login`
 
 > log in with your Expo account
 
-**In rn-eas:** Stores a GitHub personal access token (scopes `repo` and `workflow`) at `~/.eas-gh/auth.json`, mode 0600. Reads `EAS_GITHUB_TOKEN` when set, otherwise prompts. There is no Expo account, SSO or browser flow.
+**In rnd:** Stores a GitHub personal access token (scopes `repo` and `workflow`) at `~/.eas-gh/auth.json`, mode 0600. Reads `EAS_GITHUB_TOKEN` when set, otherwise prompts. There is no Expo account, SSO or browser flow.
 
 ```sh
-eas account:login [flags]
+rnd account:login [flags]
 ```
 
 | Flag | Default | Description |
@@ -373,16 +373,16 @@ eas account:login [flags]
 | `-s, --sso` |  | Log in with SSO. |
 | `-b, --[no-]browser` | `true` | Log in with your browser (default; use --no-browser for CLI-based login). |
 
-### `eas account:logout` {#eas-account-logout}
+### `rnd account:logout` {#eas-account-logout}
 
-Alias: `eas logout`
+Alias: `rnd logout`
 
 > log out
 
-**In rn-eas:** Deletes the stored token. A token in `EAS_GITHUB_TOKEN`, `GH_TOKEN` or `GITHUB_TOKEN` is still used.
+**In rnd:** Deletes the stored token. A token in `EAS_GITHUB_TOKEN`, `GH_TOKEN` or `GITHUB_TOKEN` is still used.
 
 ```sh
-eas account:logout
+rnd account:logout
 ```
 
 
@@ -393,13 +393,13 @@ answered with the alternative, rather than failing as an unknown command.
 
 | Command | Why, and what to use instead |
 |---|---|
-| `eas update` | over-the-air updates require an update server; this replacement covers builds and submissions |
-| `eas update:configure` | over-the-air updates require an update server |
-| `eas branch` | update branches require an update server |
-| `eas channel` | update channels require an update server |
-| `eas workflow:run` | EAS Workflows run on Expo infrastructure; use GitHub Actions directly |
-| `eas webhook` | EAS webhooks are emitted by Expo servers; use GitHub Actions webhooks |
-| `eas env` | EAS environment variables live on Expo servers; use GitHub Actions secrets and variables |
-| `eas secret` | EAS secrets live on Expo servers; use GitHub Actions secrets |
-| `eas metadata` | store metadata is handled by `asc metadata` in this replacement |
-| `eas deploy` | EAS Hosting deployments are an Expo service |
+| `rnd update` | over-the-air updates require an update server; this replacement covers builds and submissions |
+| `rnd update:configure` | over-the-air updates require an update server |
+| `rnd branch` | update branches require an update server |
+| `rnd channel` | update channels require an update server |
+| `rnd workflow:run` | EAS Workflows run on Expo infrastructure; use GitHub Actions directly |
+| `rnd webhook` | EAS webhooks are emitted by Expo servers; use GitHub Actions webhooks |
+| `rnd env` | EAS environment variables live on Expo servers; use GitHub Actions secrets and variables |
+| `rnd secret` | EAS secrets live on Expo servers; use GitHub Actions secrets |
+| `rnd metadata` | store metadata is handled by `asc metadata` in this replacement |
+| `rnd deploy` | EAS Hosting deployments are an Expo service |

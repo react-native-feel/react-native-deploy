@@ -4,20 +4,20 @@ There is no server in the middle. The CLI talks to two things: the GitHub API, t
 builds, and `asc`, to talk to App Store Connect.
 
 ```
-eas build  ──►  resolve the eas.json profile       (a port of @expo/eas-json)
+rnd build  ──►  resolve the eas.json profile       (a port of @expo/eas-json)
            ──►  translate it into a build plan      (distribution → export method, …)
            ──►  workflow_dispatch                   (.github/workflows/eas-build.yml)
            ──►  poll the run; download the artifact
 
-eas submit ──►  resolve the submit profile
+rnd submit ──►  resolve the submit profile
            ──►  asc builds upload                   ──►  App Store Connect
            ──►  asc builds add-groups               ──►  TestFlight
 ```
 
 ## A build is a workflow run
 
-`eas build` dispatches `eas-build.yml` with the resolved plan as its input. The run *is* the
-build: its status, step timings, logs and artifacts are what `eas build:list`, `eas build:view`
+`rnd build` dispatches `eas-build.yml` with the resolved plan as its input. The run *is* the
+build: its status, step timings, logs and artifacts are what `rnd build:list`, `rnd build:view`
 and the dashboard show.
 
 To find its own run again, the CLI stamps a random **dispatch id** into the run name, together
@@ -58,7 +58,7 @@ green with an empty artifact.
 ## The dashboard shares the CLI's code
 
 The [dashboard](/guide/dashboard) imports the same module the CLI uses to turn a workflow run into
-an EAS build record. `eas build:list --json` and the dashboard cannot disagree about a build's
+an EAS build record. `rnd build:list --json` and the dashboard cannot disagree about a build's
 status, duration or artifact.
 
 ## Cost

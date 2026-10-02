@@ -19,13 +19,13 @@ push.
 ## iOS: "integrity could not be verified" when installing
 
 The device isn't in the build's provisioning profile. iOS gives no other hint. Check that the
-ad-hoc profile in `EAS_IOS_PROFILE_INTERNAL` contains **this** device's UDID (`eas device:list`
+ad-hoc profile in `EAS_IOS_PROFILE_INTERNAL` contains **this** device's UDID (`rnd device:list`
 shows the model next to each name), then rebuild. A profile change never reaches a build that
 was already signed. See [Internal distribution](/guide/internal-distribution#adding-a-device).
 
 ## iOS: "… requires a provisioning profile"
 
-The workflow imported no profile, or one for a different bundle id. Run `eas credentials -p ios`.
+The workflow imported no profile, or one for a different bundle id. Run `rnd credentials -p ios`.
 The runner log shows which profile and bundle id it signs with:
 
 ```

@@ -17,34 +17,33 @@ store delivery come later, in [Credentials](/guide/credentials) and
 ## 1. Install the CLI
 
 ```sh
-cd eas
-npm install
-npm link        # puts `eas` on your PATH
+npm install -g @react-native-feel/deploy
+rnd --version
 ```
 
-::: warning If you also have Expo's eas-cli installed
-Both packages install a binary called `eas`, and whichever was linked last wins. Check with
-`readlink -f "$(which eas)"`. To keep both, call this one by path, for example
-`alias rneas="node /path/to/eas/bin/eas.js"`.
-:::
+This puts `rnd` on your PATH. To run it without a global install, use
+`npx @react-native-feel/deploy <command>`.
+
+`rnd` takes the same subcommands and flags as Expo's `eas`, so `eas build --profile production`
+becomes `rnd build --profile production`. The two can be installed side by side.
 
 ## 2. Log in
 
 Logging in stores a GitHub token, because GitHub is what runs the builds.
 
 ```sh
-EAS_GITHUB_TOKEN=$(gh auth token) eas login
-eas whoami
+EAS_GITHUB_TOKEN=$(gh auth token) rnd login
+rnd whoami
 ```
 
 The token is written to `~/.eas-gh/auth.json` with mode `0600`. Without `EAS_GITHUB_TOKEN`,
-`eas login` prompts for it without echoing.
+`rnd login` prompts for it without echoing.
 
 ## 3. Configure the project
 
 ```sh
 cd ~/code/my-app
-eas build:configure
+rnd build:configure
 ```
 
 This writes `eas.json` (if you don't have one) and `.github/workflows/eas-build.yml`. If you
@@ -68,13 +67,13 @@ GitHub can only dispatch a workflow that exists on the branch you build.
 
 ```sh
 git add eas.json app.json .github
-git commit -m "Add rn-eas build workflow"
+git commit -m "Add React Native Deploy build workflow"
 git push
 ```
 
 ::: warning Brand-new repository?
 GitHub does not register a dispatch-only workflow that arrives in the push that **creates** the
-repository, and the first `eas build` then fails with `(404): Not Found`. Change any line of
+repository, and the first `rnd build` then fails with `(404): Not Found`. Change any line of
 `.github/workflows/eas-build.yml` and push again. See [Troubleshooting](/guide/troubleshooting#first-build-404).
 :::
 
@@ -99,16 +98,16 @@ Then:
 
 ```sh
 npx expo install expo-dev-client   # the development profile builds a dev client
-eas build --platform all --profile development
+rnd build --platform all --profile development
 ```
 
-`eas build` prints the run URL and, by default, waits for the build to finish. With `--no-wait`
-it returns immediately; follow along with `eas build:list` or the [dashboard](/guide/dashboard).
+`rnd build` prints the run URL and, by default, waits for the build to finish. With `--no-wait`
+it returns immediately; follow along with `rnd build:list` or the [dashboard](/guide/dashboard).
 
 ## 6. Download and run it
 
 ```sh
-eas build:download --platform ios
+rnd build:download --platform ios
 cd build && unzip *.zip && tar -xzf *-simulator.tar.gz
 xcrun simctl install booted *.app
 npx expo start --dev-client

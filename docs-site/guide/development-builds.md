@@ -43,8 +43,8 @@ On Android the two are the same: a debug `.apk` runs on emulators and devices al
 No signing needed.
 
 ```sh
-eas build -p ios -e development
-eas build:download -p ios
+rnd build -p ios -e development
+rnd build:download -p ios
 cd build && unzip *.zip && tar -xzf *-simulator.tar.gz
 xcrun simctl install booted *.app
 
@@ -57,7 +57,7 @@ A device build is signed with your **ad-hoc profile**, so it installs only on th
 profile lists. Set that up once in [Internal distribution](/guide/internal-distribution).
 
 ```sh
-eas build -p all -e development-device
+rnd build -p all -e development-device
 ```
 
 When the build finishes, open its **Install** QR in the [dashboard](/guide/dashboard), scan it

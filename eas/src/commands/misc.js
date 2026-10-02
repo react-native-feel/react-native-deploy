@@ -18,7 +18,7 @@ export async function config({ options }) {
   setJsonMode(options.json);
   const project = loadProjectContext();
   if (!project.hasEasJson) {
-    die('eas.json could not be found. Run "eas build:configure" to create one.');
+    die('eas.json could not be found. Run "rnd build:configure" to create one.');
   }
   const accessor = EasJsonAccessor.fromProjectPath(project.projectRoot);
   const platform = options.platform ?? 'ios';
@@ -82,7 +82,7 @@ export async function projectInfo() {
   Log.log(`  ${chalk.dim('Branch')}      ${project.git.branch ?? '—'}${project.git.isDirty ? chalk.yellow(' (uncommitted changes)') : ''}`);
   Log.log(`  ${chalk.dim('Workflow')}    ${project.isBare ? 'bare (native dirs committed)' : 'managed (prebuild on the runner)'}`);
   Log.log(`  ${chalk.dim('Lockfile')}    ${project.lockfiles[0] ?? 'none'}`);
-  Log.log(`  ${chalk.dim('eas.json')}    ${project.hasEasJson ? 'present' : chalk.yellow('missing — run "eas build:configure"')}`);
+  Log.log(`  ${chalk.dim('eas.json')}    ${project.hasEasJson ? 'present' : chalk.yellow('missing — run "rnd build:configure"')}`);
   if (project.appConfig.isDynamic) {
     Log.log('');
     Log.warn(
@@ -102,7 +102,7 @@ export async function credentials({ options }) {
   const project = loadProjectContext();
   const auth = readAuth();
   if (!auth?.token) {
-    die('Not logged in. Run "eas login" first.');
+    die('Not logged in. Run "rnd login" first.');
   }
   if (!project.repo) {
     die('This project has no GitHub "origin" remote, so it has nowhere to store credentials.');
@@ -197,7 +197,7 @@ export async function deviceCreate() {
 export async function accountView() {
   const auth = readAuth();
   if (!auth?.token) {
-    die('Not logged in. Run "eas login".');
+    die('Not logged in. Run "rnd login".');
   }
   const client = new GitHubClient({ token: auth.token, repo: null });
   const user = await client.verifyToken();

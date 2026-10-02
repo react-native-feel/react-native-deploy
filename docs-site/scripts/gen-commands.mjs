@@ -14,7 +14,7 @@ import { COMMANDS, UNSUPPORTED } from '../../eas/src/cli/spec.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-/** What the command does in rn-eas, where that differs from or adds to EAS. */
+/** What the command does in rnd, where that differs from or adds to EAS. */
 const NOTES = {
   build:
     'Resolves the profile from `eas.json`, checks it can be built, and dispatches `.github/workflows/eas-build.yml` on GitHub Actions. iOS runs on `macos-26`, Android on `ubuntu-latest`. Internal builds are published to the [install service](/guide/internal-distribution) when it is configured. `--local` is refused: the point is that the Mac is GitHub\'s. See [Building](/guide/building).',
@@ -86,7 +86,7 @@ function flagName(flag) {
 
 function usage(command) {
   const args = (command.args ?? []).map((a) => `[${typeof a === 'string' ? a : a.name}]`);
-  return ['eas', command.id, ...args, (command.flags ?? []).length ? '[flags]' : ''].filter(Boolean).join(' ');
+  return ['rnd', command.id, ...args, (command.flags ?? []).length ? '[flags]' : ''].filter(Boolean).join(' ');
 }
 
 function anchor(id) {
@@ -94,13 +94,13 @@ function anchor(id) {
 }
 
 function renderCommand(command) {
-  const lines = [`### \`eas ${command.id}\` {#${anchor(command.id)}}`, ''];
+  const lines = [`### \`rnd ${command.id}\` {#${anchor(command.id)}}`, ''];
   if (command.aliases?.length) {
-    lines.push(`Alias: ${command.aliases.map((a) => `\`eas ${a}\``).join(', ')}`, '');
+    lines.push(`Alias: ${command.aliases.map((a) => `\`rnd ${a}\``).join(', ')}`, '');
   }
   lines.push(`> ${command.description}`, '');
   if (NOTES[command.id]) {
-    lines.push(`**In rn-eas:** ${NOTES[command.id]}`, '');
+    lines.push(`**In rnd:** ${NOTES[command.id]}`, '');
   }
   lines.push('```sh', usage(command), '```', '');
   const flags = command.flags ?? [];
@@ -126,7 +126,7 @@ const sections = GROUPS.map(([title, match]) => {
 });
 
 const unsupported = Object.entries(UNSUPPORTED)
-  .map(([id, reason]) => `| \`eas ${id}\` | ${cell(reason)} |`)
+  .map(([id, reason]) => `| \`rnd ${id}\` | ${cell(reason)} |`)
   .join('\n');
 
 const page = `---
@@ -139,7 +139,7 @@ outline: [2, 3]
 
 Every command below takes the same flags as \`eas-cli\`: a contract test compares this
 table with \`eas-cli\`'s own \`oclif.manifest.json\`. The quoted line is \`eas-cli\`'s
-description; **In rn-eas** says what the command does here.
+description; **In rnd** says what the command does here.
 
 Global options: \`--help\` on any command, \`--version\` on \`eas\`.
 

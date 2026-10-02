@@ -1,10 +1,10 @@
 # Credentials
 
 Signing assets are **GitHub repository secrets**, sealed against the repository's public key;
-GitHub never stores a plaintext value. `eas credentials` reports which ones exist:
+GitHub never stores a plaintext value. `rnd credentials` reports which ones exist:
 
 ```sh
-eas credentials
+rnd credentials
 ```
 
 | Secret | Contents | Used by |
@@ -17,7 +17,7 @@ eas credentials
 | `EAS_ANDROID_STORE_PASSWORD` / `EAS_ANDROID_KEY_ALIAS` / `EAS_ANDROID_KEY_PASSWORD` | keystore details | Android release builds |
 | `EAS_INSTALL_TOKEN` | upload token for the [install service](/guide/internal-distribution) | internal builds |
 
-`eas credentials` does not create or upload these yet. The steps below do it with `asc`,
+`rnd credentials` does not create or upload these yet. The steps below do it with `asc`,
 `openssl` and `gh`.
 
 ## iOS
@@ -83,7 +83,7 @@ For internal builds you also need an ad-hoc profile: see
 base64 -i dist.p12 | gh secret set EAS_IOS_DIST_P12
 gh secret set EAS_IOS_P12_PASSWORD < p12pass
 base64 -i appstore.mobileprovision | gh secret set EAS_IOS_PROFILE
-eas credentials -p ios
+rnd credentials -p ios
 ```
 
 Keep `dist.key` somewhere safe (a password manager), and delete the working files.

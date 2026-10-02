@@ -4,9 +4,9 @@ import { defineConfig } from 'vitepress';
 // asset and link is prefixed, exactly like the dashboard's /deploy/dashboard/.
 export default defineConfig({
   base: '/deploy/docs/',
-  title: 'rn-eas',
+  title: 'React Native Deploy',
   description:
-    'A drop-in EAS replacement: the same eas commands and eas.json, with builds on GitHub Actions and store delivery through asc.',
+    'A drop-in EAS replacement: the same rnd commands and eas.json, with builds on GitHub Actions and store delivery through asc.',
   cleanUrls: true,
   lastUpdated: false,
   head: [['meta', { name: 'theme-color', content: '#4f46e5' }]],

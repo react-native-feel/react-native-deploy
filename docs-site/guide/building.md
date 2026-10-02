@@ -1,8 +1,8 @@
 # Building
 
 ```sh
-eas build --platform ios --profile production
-eas build -p all -e preview --no-wait
+rnd build --platform ios --profile production
+rnd build -p all -e preview --no-wait
 ```
 
 `--platform` takes `ios`, `android` or `all` (the default). `--profile` defaults to `production`.
@@ -10,7 +10,7 @@ eas build -p all -e preview --no-wait
 ## What the build runs
 
 The runner builds the **pushed commit** of your current branch, not your working tree. If you have
-uncommitted changes, `eas build` warns and builds what is on GitHub. Push first.
+uncommitted changes, `rnd build` warns and builds what is on GitHub. Push first.
 
 ## Which artifact you get
 
@@ -34,7 +34,7 @@ job:
 - a simulator build with `distribution: "store"`;
 - an Android internal build that would produce an `.aab`.
 
-`eas config -p ios -e <profile>` prints the profile as the runner will receive it, after
+`rnd config -p ios -e <profile>` prints the profile as the runner will receive it, after
 `extends`, platform blocks and defaults are applied. Start there when a build does something
 unexpected.
 
@@ -65,11 +65,11 @@ from `app.json`. Bump them before each build you upload to a store.
 ## Following a build
 
 ```sh
-eas build:list --platform ios --limit 5
-eas build:view <id | id-prefix | run-id>
-eas build:cancel <id>
-eas build:download --platform android          # latest Android build → ./build/<id>.zip
-eas build:download --build-id <id> --output ./out
+rnd build:list --platform ios --limit 5
+rnd build:view <id | id-prefix | run-id>
+rnd build:cancel <id>
+rnd build:download --platform android          # latest Android build → ./build/<id>.zip
+rnd build:download --build-id <id> --output ./out
 ```
 
 Every build also links to its GitHub Actions run, where the raw logs live, and appears in the

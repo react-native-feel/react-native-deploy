@@ -198,7 +198,7 @@ export function validateBuildable({ platform, profile, credentials = {} }) {
     const needsSigning = !profile.simulator && !profile.withoutCredentials;
     if (needsSigning && credentials.ios === false) {
       errors.push(
-        'This profile needs iOS signing credentials, but none are configured. Run "eas credentials".'
+        'This profile needs iOS signing credentials, but none are configured. Run "rnd credentials".'
       );
     }
   }
@@ -213,7 +213,7 @@ export function validateBuildable({ platform, profile, credentials = {} }) {
     }
     if (!profile.withoutCredentials && credentials.android === false) {
       errors.push(
-        'This profile needs an Android keystore, but none is configured. Run "eas credentials".'
+        'This profile needs an Android keystore, but none is configured. Run "rnd credentials".'
       );
     }
   }

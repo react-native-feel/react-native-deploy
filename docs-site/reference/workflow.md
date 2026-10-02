@@ -1,11 +1,11 @@
 # Workflow, secrets & variables
 
-`eas build:configure` copies `eas/templates/eas-build.yml` to `.github/workflows/eas-build.yml`.
+`rnd build:configure` copies `eas/templates/eas-build.yml` to `.github/workflows/eas-build.yml`.
 The CLI never rewrites it: every decision arrives as a dispatch input, so you can also start a
 build by hand from the repository's **Actions** tab.
 
 ::: tip Keep it current
-Workflow fixes ship in the template, not in your repository. After upgrading rn-eas, copy the
+Workflow fixes ship in the template, not in your repository. After upgrading React Native Deploy, copy the
 template over your workflow and push.
 :::
 

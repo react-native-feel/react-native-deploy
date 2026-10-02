@@ -185,7 +185,7 @@ export function clientFor(repo) {
   const auth = readAuth();
   if (!auth?.token) {
     throw new Error(
-      'Not logged in. Run "eas login" to store a GitHub token, or set EAS_GITHUB_TOKEN.'
+      'Not logged in. Run "rnd login" to store a GitHub token, or set EAS_GITHUB_TOKEN.'
     );
   }
   if (!repo) {

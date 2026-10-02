@@ -1,6 +1,6 @@
 # Differences from EAS
 
-rn-eas aims to be a drop-in for the **build** and **submit** half of EAS. Where it behaves
+React Native Deploy aims to be a drop-in for the **build** and **submit** half of EAS. Where it behaves
 differently, it does so on purpose and says so at the command line.
 
 ## Held to by tests
@@ -13,12 +13,13 @@ differently, it does so on purpose and says so at the command line.
 
 ## Deliberate differences
 
-| EAS | rn-eas | Why |
+| EAS | React Native Deploy | Why |
 |---|---|---|
 | Expo account, `eas login` with SSO/browser | GitHub token | GitHub runs the builds |
+| The `eas` command | The `rnd` command | Same subcommands and flags, so a script only needs `eas ` swapped for `rnd ` |
 | Builds on Expo's machines | Builds on GitHub-hosted runners in your repo | The point of the project |
 | `eas build --local` | Refused | Use a runner, or `npx expo run:ios` |
-| Credentials stored and generated on Expo's servers | Repository secrets; `eas credentials` reports, it does not create yet | See [Credentials](/guide/credentials) |
+| Credentials stored and generated on Expo's servers | Repository secrets; `rnd credentials` reports, it does not create yet | See [Credentials](/guide/credentials) |
 | `eas build:version:set`, remote version source | Refused; versions live in `app.json` | There is no version server |
 | `eas submit --url` | Refused | `asc` uploads local files; download first |
 | Android `eas submit` | Not wired up yet | Needs a Google Play service account, not `asc`. Upload the `.aab` to Play Console directly |
@@ -32,9 +33,9 @@ These are known gaps rather than design decisions:
 - **`autoIncrement`** is read from the profile but not applied on the runner: every build uses the
   `buildNumber` / `versionCode` in `app.json`. App Store Connect rejects a second upload with the
   same build number, so bump it yourself before each store build for now.
-- **`eas build --auto-submit`**, `--auto-submit-with-profile` and `--what-to-test` are accepted but
-  do nothing. Run `eas build:download` and `eas submit --path …` after the build.
+- **`rnd build --auto-submit`**, `--auto-submit-with-profile` and `--what-to-test` are accepted but
+  do nothing. Run `rnd build:download` and `rnd submit --path …` after the build.
 - **Credential setup** has no wizard; the manual steps are in [Credentials](/guide/credentials).
 - **App extensions** (widgets, notification services) are not signed: one provisioning profile
   per build, applied to the app target.
-- **`eas device:create`** prints the `asc` command to run rather than registering the device.
+- **`rnd device:create`** prints the `asc` command to run rather than registering the device.
