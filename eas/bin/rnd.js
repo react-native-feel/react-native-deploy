@@ -6,11 +6,14 @@ import { fileURLToPath } from 'node:url';
 import { createProgram } from '../src/cli/program.js';
 import { Log } from '../src/utils/logger.js';
 
-const pkg = JSON.parse(
-  readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../package.json'), 'utf-8')
-);
+// The published bundle has the version inlined (scripts/build.mjs); from source
+// it is read from package.json next door.
+const version =
+  typeof __RND_VERSION__ !== 'undefined'
+    ? __RND_VERSION__
+    : JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../package.json'), 'utf-8')).version;
 
-const program = createProgram({ version: pkg.version });
+const program = createProgram({ version });
 
 try {
   await program.parseAsync(process.argv);
