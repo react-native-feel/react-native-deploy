@@ -48,6 +48,7 @@ export default defineConfig({
         items: [
           { text: 'Dashboard & install service', link: '/guide/dashboard' },
           { text: 'Troubleshooting', link: '/guide/troubleshooting' },
+          { text: 'Telemetry', link: '/guide/telemetry' },
         ],
       },
       {

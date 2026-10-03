@@ -1,5 +1,6 @@
 import { Command, Option } from 'commander';
 
+import { summarizeFlags, track } from '../utils/telemetry.js';
 import { COMMANDS, UNSUPPORTED } from './spec.js';
 
 /**
@@ -72,6 +73,11 @@ const HANDLERS = {
   'account:logout': () => import('../commands/misc.js').then((m) => m.accountLogout),
 };
 
+/** `flag_platform: "ios"` reads better than `platform` in PostHog's property list. */
+function prefixed(flags) {
+  return Object.fromEntries(Object.entries(flags).map(([name, value]) => [`flag_${name}`, value]));
+}
+
 export function createProgram({ version = '0.1.0' } = {}) {
   const program = new Command();
 
@@ -107,8 +113,20 @@ export function createProgram({ version = '0.1.0' } = {}) {
         if (!load) {
           throw new Error(`"${spec.id}" is declared but has no handler wired up.`);
         }
-        const handler = await load();
-        await handler({ args: positional, options, commandId: spec.id });
+        // Sent alongside the command rather than before it, so it costs no
+        // wall-clock time.
+        const flags = summarizeFlags(spec, args[args.length - 1]);
+        const started = Date.now();
+        const sent = track('command_run', { command: spec.id, invoked_as: name, ...prefixed(flags) });
+        try {
+          const handler = await load();
+          await handler({ args: positional, options, commandId: spec.id });
+        } catch (err) {
+          await track('command_failed', { command: spec.id, duration_ms: Date.now() - started });
+          throw err;
+        } finally {
+          await sent;
+        }
       });
     }
   }
@@ -120,12 +138,15 @@ export function createProgram({ version = '0.1.0' } = {}) {
       .command(name, { hidden: true })
       .allowUnknownOption()
       .allowExcessArguments(true)
-      .action(() => {
+      .action(async () => {
         process.exitCode = 1;
+        // Which missing commands people reach for is the roadmap.
+        const sent = track('unsupported_command', { command: name });
         console.error(
           `"rnd ${name}" is not part of this replacement: ${reason}.\n` +
             'Run "rnd --help" for the commands that are supported.'
         );
+        await sent;
       });
   }
 

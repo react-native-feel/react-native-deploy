@@ -74,6 +74,10 @@ npm install -g @react-native-feel/deploy   # puts `rnd` on your PATH
 Prerequisites: Node 20+, a GitHub repo holding your app, and `asc` for anything
 touching the App Store.
 
+`rnd` sends anonymous usage stats: which commands and flags run, never their
+values, paths or anything from your project. Opt out with `DO_NOT_TRACK=1`.
+[What is sent](https://react-native-deploy.pages.dev/deploy/docs/guide/telemetry).
+
 ## Getting started
 
 ```bash
