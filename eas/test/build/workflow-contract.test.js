@@ -153,6 +153,30 @@ describe('workflow safety properties', () => {
     assert.match(importStep, /export_method \}\}' = 'ad-hoc'/);
   });
 
+  it('generates the ad-hoc profile from the device registry before signing, with the secret as fallback', () => {
+    const adhoc = workflow.slice(workflow.indexOf('name: Provision ad-hoc profile')).split('\n      - name:')[0];
+    assert.match(adhoc, /if: inputs\.platform == 'ios' && steps\.plan\.outputs\.export_method == 'ad-hoc'/);
+    // No key: leave the step without output so the secret is used, rather than failing.
+    assert.match(adhoc, /EAS_ASC_KEY_ID[\s\S]*exit 0/);
+    assert.match(adhoc, /profileType: 'IOS_APP_ADHOC'/);
+    assert.match(adhoc, /\/api\/devices/);
+    assert.ok(
+      workflow.indexOf('name: Provision ad-hoc profile') < workflow.indexOf('name: Import signing credentials'),
+      'the profile must exist before signing imports it'
+    );
+    const importStep = workflow.slice(workflow.indexOf('name: Import signing credentials')).split('\n      - name:')[0];
+    assert.match(importStep, /PROFILE_GENERATED: \$\{\{ steps\.adhoc\.outputs\.profile_path \}\}/);
+    assert.ok(importStep.indexOf('PROFILE_GENERATED:-') < importStep.indexOf('PROFILE_INTERNAL:-'), 'a generated profile wins');
+    assert.doesNotMatch(adhoc, /echo[^\n]*\$\{?(ASC_API_KEY|INSTALL_TOKEN|P12_PASSWORD)/, 'secrets must never be echoed');
+  });
+
+  it('records the provisioned devices on the install page meta', () => {
+    const importStep = workflow.slice(workflow.indexOf('name: Import signing credentials')).split('\n      - name:')[0];
+    assert.match(importStep, /ProvisionedDevices/);
+    const publish = workflow.slice(workflow.indexOf('name: Publish for install')).split('\n      - name:')[0];
+    assert.match(publish, /"provisionedDevices": provisioned/);
+  });
+
   it('publishes only internal device builds for install, binary before meta.json', () => {
     const publish = workflow.slice(workflow.indexOf('name: Publish for install')).split('\n      - name:')[0];
     assert.match(publish, /if: steps\.plan\.outputs\.distribution == 'internal' && steps\.plan\.outputs\.simulator != 'true'/);

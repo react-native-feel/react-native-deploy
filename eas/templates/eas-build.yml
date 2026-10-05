@@ -200,6 +200,202 @@ jobs:
           echo "Using Xcode scheme: $SCHEME"
           echo "scheme=$SCHEME" >> "$GITHUB_OUTPUT"
 
+      - name: Provision ad-hoc profile
+        # EAS regenerates the ad-hoc profile from its device list at build time,
+        # so a device added since the last build is never silently missing. Same
+        # here: with an App Store Connect API key, pending devices from the
+        # registry (`rnd device:create`) are registered with Apple and the build
+        # is signed with a profile listing every device. Without the key, the
+        # EAS_IOS_PROFILE_INTERNAL secret is used as is.
+        id: adhoc
+        if: inputs.platform == 'ios' && steps.plan.outputs.export_method == 'ad-hoc' && steps.plan.outputs.without_credentials != 'true'
+        shell: bash
+        env:
+          ASC_KEY_ID: ${{ secrets.EAS_ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.EAS_ASC_ISSUER_ID }}
+          ASC_API_KEY: ${{ secrets.EAS_ASC_API_KEY }}
+          P12: ${{ secrets.EAS_IOS_DIST_P12 }}
+          P12_PASSWORD: ${{ secrets.EAS_IOS_P12_PASSWORD }}
+          INSTALL_URL: ${{ vars.EAS_INSTALL_URL }}
+          INSTALL_TOKEN: ${{ secrets.EAS_INSTALL_TOKEN }}
+          BUNDLE_ID: ${{ steps.plan.outputs.ios_bundle_identifier }}
+          SCHEME: ${{ steps.xcode.outputs.scheme }}
+          CONFIGURATION: ${{ steps.plan.outputs.build_configuration }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ASC_KEY_ID:-}" ] || [ -z "${ASC_ISSUER_ID:-}" ] || [ -z "${ASC_API_KEY:-}" ]; then
+            echo "No App Store Connect API key (EAS_ASC_KEY_ID, EAS_ASC_ISSUER_ID, EAS_ASC_API_KEY): signing with the EAS_IOS_PROFILE_INTERNAL secret as is."
+            exit 0
+          fi
+          if [ -z "${P12:-}" ]; then
+            echo "::error::No iOS signing credentials in repo secrets. Run 'rnd credentials' to check."
+            exit 1
+          fi
+          if [ -z "$BUNDLE_ID" ]; then
+            # A dynamic app config: read what prebuild wrote into the project.
+            BUNDLE_ID=$(xcodebuild -showBuildSettings -workspace "ios/$SCHEME.xcworkspace" -scheme "$SCHEME" \
+              -configuration "$CONFIGURATION" 2>/dev/null | awk '$1 == "PRODUCT_BUNDLE_IDENTIFIER" { print $3; exit }')
+          fi
+          # The profile must name the certificate the build is signed with.
+          echo "$P12" | base64 --decode > "$RUNNER_TEMP/adhoc-dist.p12"
+          CERT_SERIAL=$( { openssl pkcs12 -in "$RUNNER_TEMP/adhoc-dist.p12" -nokeys -passin env:P12_PASSWORD 2>/dev/null \
+            || openssl pkcs12 -legacy -in "$RUNNER_TEMP/adhoc-dist.p12" -nokeys -passin env:P12_PASSWORD; } \
+            | openssl x509 -noout -serial | cut -d= -f2)
+          rm -f "$RUNNER_TEMP/adhoc-dist.p12"
+          export BUNDLE_ID CERT_SERIAL
+          node --input-type=module <<'JS'
+          import { sign } from 'node:crypto';
+          import { appendFileSync, writeFileSync } from 'node:fs';
+
+          const env = process.env;
+          const ASC = env.ASC_API_BASE || 'https://api.appstoreconnect.apple.com';
+          const PROFILE_NAME = `rnd ad-hoc ${env.BUNDLE_ID}`;
+          const fail = (message) => { console.log(`::error::${message}`); process.exit(1); };
+          const warn = (message) => console.log(`::warning::${message}`);
+
+          // App Store Connect API token: ES256 JWT, 20-minute lifetime.
+          const pem = env.ASC_API_KEY.includes('BEGIN') ? env.ASC_API_KEY : Buffer.from(env.ASC_API_KEY, 'base64').toString();
+          const b64 = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
+          const now = Math.floor(Date.now() / 1000);
+          const unsigned = `${b64({ alg: 'ES256', kid: env.ASC_KEY_ID, typ: 'JWT' })}.${b64({ iss: env.ASC_ISSUER_ID, iat: now, exp: now + 1200, aud: 'appstoreconnect-v1' })}`;
+          const jwt = `${unsigned}.${sign('sha256', Buffer.from(unsigned), { key: pem, dsaEncoding: 'ieee-p1363' }).toString('base64url')}`;
+
+          async function asc(method, path, body) {
+            const res = await fetch(path.startsWith('http') ? path : `${ASC}${path}`, {
+              method,
+              headers: { authorization: `Bearer ${jwt}`, ...(body ? { 'content-type': 'application/json' } : {}) },
+              body: body ? JSON.stringify(body) : undefined,
+            });
+            if (res.status === 204) return null;
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok) {
+              const detail = (json.errors ?? []).map((e) => e.detail ?? e.title).join('; ');
+              throw new Error(`App Store Connect ${method} ${path.split('?')[0]} failed (${res.status}): ${detail || res.statusText}`);
+            }
+            return json;
+          }
+          async function all(path) {
+            const out = [];
+            for (let next = path; next; ) {
+              const page = await asc('GET', next);
+              out.push(...page.data);
+              next = page.links?.next;
+            }
+            return out;
+          }
+          async function registry(method, path = '', body) {
+            const res = await fetch(`${env.INSTALL_URL.replace(/\/+$/, '')}/api/devices${path}`, {
+              method,
+              headers: { authorization: `Bearer ${env.INSTALL_TOKEN}`, ...(body ? { 'content-type': 'application/json' } : {}) },
+              body: body ? JSON.stringify(body) : undefined,
+            });
+            if (!res.ok) throw new Error(`Device registry ${method} ${path || '/'} failed (${res.status}): ${await res.text()}`);
+            return res.json();
+          }
+
+          if (!env.BUNDLE_ID) fail('Could not determine the iOS bundle identifier. Set ios.bundleIdentifier in app.json.');
+          const serial = (s) => String(s ?? '').toUpperCase().replace(/^0+/, '');
+          const certificate = (await all('/v1/certificates?limit=200')).find((c) => serial(c.attributes.serialNumber) === serial(env.CERT_SERIAL));
+          if (!certificate) fail(`The certificate in EAS_IOS_DIST_P12 (serial ${env.CERT_SERIAL}) is not on this App Store Connect team, or has been revoked.`);
+          const bundle = (await all(`/v1/bundleIds?filter[identifier]=${encodeURIComponent(env.BUNDLE_ID)}&limit=200`))
+            .find((b) => b.attributes.identifier === env.BUNDLE_ID);
+          if (!bundle) fail(`The bundle id ${env.BUNDLE_ID} is not registered on this team. Register it under Identifiers in the Apple Developer portal.`);
+
+          // Which devices the profile should list.
+          const appleDevices = await all('/v1/devices?limit=200');
+          const byUdid = new Map(appleDevices.map((d) => [d.attributes.udid.toUpperCase(), d]));
+          let wanted = [];
+          const useRegistry = Boolean(env.INSTALL_URL && env.INSTALL_TOKEN);
+          if (useRegistry) {
+            const { devices } = await registry('GET');
+            for (const device of devices.filter((d) => d.status !== 'disabled')) {
+              let apple = byUdid.get(device.udid.toUpperCase());
+              try {
+                if (!apple) {
+                  ({ data: apple } = await asc('POST', '/v1/devices', {
+                    data: {
+                      type: 'devices',
+                      attributes: { name: device.name, udid: device.udid, platform: device.deviceClass === 'MAC' ? 'MAC_OS' : 'IOS' },
+                    },
+                  }));
+                  console.log(`Registered ${device.name} (${device.udid}) with Apple.`);
+                } else if (apple.attributes.status !== 'ENABLED') {
+                  ({ data: apple } = await asc('PATCH', `/v1/devices/${apple.id}`, {
+                    data: { type: 'devices', id: apple.id, attributes: { status: 'ENABLED' } },
+                  }));
+                  console.log(`Re-enabled ${device.name} (${device.udid}) on Apple.`);
+                }
+              } catch (err) {
+                // One bad UDID or a full device quota must not fail every build.
+                warn(`${device.name} (${device.udid}) could not be registered with Apple and is left out: ${err.message}`);
+                continue;
+              }
+              if (device.status !== 'registered' || device.appleDeviceId !== apple.id) {
+                await registry('PATCH', `/${encodeURIComponent(device.udid)}`, { status: 'registered', appleDeviceId: apple.id });
+              }
+              wanted.push({ id: apple.id, name: device.name, udid: device.udid });
+            }
+          } else {
+            // No registry: every enabled iOS device on the team, which is what
+            // a hand-made ad-hoc profile usually lists.
+            wanted = appleDevices
+              .filter((d) => d.attributes.status === 'ENABLED' && d.attributes.platform === 'IOS')
+              .map((d) => ({ id: d.id, name: d.attributes.name, udid: d.attributes.udid }));
+          }
+          if (wanted.length === 0) {
+            fail(useRegistry
+              ? 'No devices to provision. Register one with "rnd device:create" and build again.'
+              : 'No enabled iOS devices on this Apple team. Register one with "rnd device:create".');
+          }
+
+          // Reuse our profile when it already lists exactly these devices and this
+          // certificate. Otherwise replace it: the API cannot edit a profile's
+          // device list, so regenerating means delete and create.
+          const ids = (list) => list.map((x) => x.id).sort().join(',');
+          const existing = await all(`/v1/profiles?filter[name]=${encodeURIComponent(PROFILE_NAME)}&filter[profileType]=IOS_APP_ADHOC&limit=200`);
+          let profile = null;
+          for (const candidate of existing) {
+            const fresh = candidate.attributes.profileState === 'ACTIVE'
+              && new Date(candidate.attributes.expirationDate) > new Date(Date.now() + 86400e3);
+            if (!profile && fresh) {
+              const [devices, certificates] = await Promise.all([
+                all(`/v1/profiles/${candidate.id}/devices?limit=200`),
+                all(`/v1/profiles/${candidate.id}/certificates?limit=200`),
+              ]);
+              if (ids(devices) === ids(wanted) && certificates.some((c) => c.id === certificate.id)) {
+                profile = candidate;
+                console.log(`Reusing ad-hoc profile "${PROFILE_NAME}": its ${wanted.length} device(s) are unchanged.`);
+                continue;
+              }
+            }
+            await asc('DELETE', `/v1/profiles/${candidate.id}`);
+          }
+          if (!profile) {
+            ({ data: profile } = await asc('POST', '/v1/profiles', {
+              data: {
+                type: 'profiles',
+                attributes: { name: PROFILE_NAME, profileType: 'IOS_APP_ADHOC' },
+                relationships: {
+                  bundleId: { data: { type: 'bundleIds', id: bundle.id } },
+                  certificates: { data: [{ type: 'certificates', id: certificate.id }] },
+                  devices: { data: wanted.map((d) => ({ type: 'devices', id: d.id })) },
+                },
+              },
+            }));
+            console.log(`Generated ad-hoc profile "${PROFILE_NAME}" for ${wanted.length} device(s).`);
+            // Apple quietly leaves out devices it is still processing.
+            const listed = new Set((await all(`/v1/profiles/${profile.id}/devices?limit=200`)).map((d) => d.id));
+            for (const d of wanted.filter((d) => !listed.has(d.id))) {
+              warn(`${d.name} (${d.udid}) is not in the profile yet. Apple can take up to 72 hours to process a new device; build again later.`);
+            }
+          }
+          for (const d of wanted) console.log(`  • ${d.name}  ${d.udid}`);
+
+          const path = `${env.RUNNER_TEMP}/adhoc.mobileprovision`;
+          writeFileSync(path, Buffer.from(profile.attributes.profileContent, 'base64'));
+          appendFileSync(env.GITHUB_OUTPUT, `profile_path=${path}\n`);
+          JS
+
       - name: Import signing credentials
         id: signing
         if: inputs.platform == 'ios' && steps.plan.outputs.without_credentials != 'true'
@@ -209,6 +405,7 @@ jobs:
           P12_PASSWORD: ${{ secrets.EAS_IOS_P12_PASSWORD }}
           PROFILE_STORE: ${{ secrets.EAS_IOS_PROFILE }}
           PROFILE_INTERNAL: ${{ secrets.EAS_IOS_PROFILE_INTERNAL }}
+          PROFILE_GENERATED: ${{ steps.adhoc.outputs.profile_path }}
         run: |
           set -euo pipefail
           if [ -z "${P12:-}" ]; then
@@ -217,10 +414,13 @@ jobs:
           fi
           # An App Store profile cannot sign an ad-hoc export and vice versa, so
           # internal builds have their own profile — the one listing test devices.
-          if [ '${{ steps.plan.outputs.export_method }}' = 'ad-hoc' ]; then
+          if [ -n "${PROFILE_GENERATED:-}" ]; then
+            # Generated from the device list by the previous step.
+            PROFILE=$(base64 -i "$PROFILE_GENERATED")
+          elif [ '${{ steps.plan.outputs.export_method }}' = 'ad-hoc' ]; then
             PROFILE="${PROFILE_INTERNAL:-}"
             if [ -z "$PROFILE" ]; then
-              echo "::error::Internal iOS builds need an ad-hoc provisioning profile with your test devices in the EAS_IOS_PROFILE_INTERNAL secret. Run 'rnd credentials' to check."
+              echo "::error::Internal iOS builds need an ad-hoc provisioning profile: add an App Store Connect API key (EAS_ASC_KEY_ID, EAS_ASC_ISSUER_ID, EAS_ASC_API_KEY) to generate one from your devices, or put one in the EAS_IOS_PROFILE_INTERNAL secret. Run 'rnd credentials' to check."
               exit 1
             fi
           else
@@ -249,6 +449,9 @@ jobs:
           security cms -D -i "$RUNNER_TEMP/eas.mobileprovision" > "$RUNNER_TEMP/eas-profile.plist"
           PB() { /usr/libexec/PlistBuddy -c "Print $1" "$RUNNER_TEMP/eas-profile.plist"; }
           UUID=$(PB UUID)
+          # The UDIDs this build will install on, for the install page.
+          python3 -c 'import json,plistlib,sys; print(json.dumps(plistlib.load(open(sys.argv[1],"rb")).get("ProvisionedDevices",[])))' \
+            "$RUNNER_TEMP/eas-profile.plist" > "$RUNNER_TEMP/provisioned-devices.json"
           TEAM=$(PB TeamIdentifier:0)
           APP_ID=$(PB Entitlements:application-identifier)
           for DIR in ~/Library/MobileDevice/Provisioning\ Profiles ~/Library/Developer/Xcode/UserData/Provisioning\ Profiles; do
@@ -493,6 +696,10 @@ jobs:
           python3 - > "$RUNNER_TEMP/install-meta.json" <<'PY'
           import json, os
           from datetime import datetime, timezone
+          # Ad-hoc builds only: the install page lists these devices, and warns a
+          # registered phone that is not one of them before it installs.
+          path = os.path.join(os.environ["RUNNER_TEMP"], "provisioned-devices.json")
+          provisioned = json.load(open(path)) if os.environ["EAS_PLATFORM"] == "ios" and os.path.exists(path) else None
           print(json.dumps({
               "platform": os.environ["EAS_PLATFORM"],
               "name": os.environ["NAME_SHOWN"],
@@ -505,6 +712,7 @@ jobs:
               "runId": int(os.environ["GITHUB_RUN_ID"]),
               "createdAt": datetime.now(timezone.utc).isoformat(),
               "size": int(os.environ["SIZE"]),
+              "provisionedDevices": provisioned,
           }))
           PY
           curl -fsS -X PUT "${AUTH[@]}" --data-binary @"$RUNNER_TEMP/install-meta.json" "$API/meta.json" >/dev/null

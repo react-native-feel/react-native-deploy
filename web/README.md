@@ -10,6 +10,8 @@ screens — plus the install service behind its QR codes. Live at
 | `/deploy/docs/` | the rn-eas docs ([`../docs-site`](../docs-site)) |
 | `/install/<dispatch-id>` | public install page for one internal build (`worker/`) |
 | `/api/uploads/…` | token-guarded R2 upload API for the build workflow (`worker/`) |
+| `/register-device/<token>` | public device registration: Apple's Profile Service enrollment (`worker/devices.js`) |
+| `/api/devices/…` | token-guarded device registry in D1, for `rnd device:*` and the build workflow |
 
 ```bash
 npm install
@@ -18,7 +20,7 @@ npm test         # mapper + install-service tests
 npm run deploy   # build dashboard + docs, then `wrangler pages deploy`
 ```
 
-First-time Cloudflare setup (R2 bucket, Pages project, `UPLOAD_TOKEN`) is in the docs:
+First-time Cloudflare setup (R2 bucket, D1 database, Pages project, `UPLOAD_TOKEN`) is in the docs:
 [Dashboard & install service](https://react-native-deploy.pages.dev/deploy/docs/guide/dashboard#deploy).
 
 ## What it shows
@@ -66,10 +68,13 @@ fallback on a hard refresh (and keeps missing hashed assets as real 404s).
 
 ## Tests
 
-`npm test` runs 40 tests. 29 cover the mapper: status translation for every GitHub
+`npm test` runs 59 tests. 29 cover the mapper: status translation for every GitHub
 conclusion, build id stability and UUID shape, EAS's build titles, and the
 invariants the views depend on — that a failed build has a diagnosable error
 code, that nothing succeeds after a failing step, and that the phase timings sum
-to the reported build time. The other 11 cover the install service
+to the reported build time. 11 cover the install service
 (`worker/install.test.js`): upload-key validation, manifest escaping, the
-itms-services URL, the per-device install page and its desktop QR code.
+itms-services URL, the per-device install page and its desktop QR code. The last 19
+(`worker/devices.test.js`) run the Worker against the real D1 migration on `node:sqlite`: the
+device API, the whole Profile Service round trip, expired and forged registrations, and the
+install page's provisioned-devices list.

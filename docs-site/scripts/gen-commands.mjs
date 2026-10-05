@@ -17,7 +17,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 /** What the command does in rnd, where that differs from or adds to EAS. */
 const NOTES = {
   build:
-    'Resolves the profile from `eas.json`, checks it can be built, and dispatches `.github/workflows/eas-build.yml` on GitHub Actions. iOS runs on `macos-26`, Android on `ubuntu-latest`. Internal builds are published to the [install service](/guide/internal-distribution) when it is configured. `--local` is refused: the point is that the Mac is GitHub\'s. See [Building](/guide/building).',
+    'Resolves the profile from `eas.json`, checks it can be built, and dispatches `.github/workflows/eas-build.yml` on GitHub Actions. iOS runs on `macos-26`, Android on `ubuntu-latest`. Internal builds are published to the [install service](/guide/internal-distribution) when it is configured. With an App Store Connect API key, internal iOS builds regenerate the ad-hoc profile whenever the registered devices change, so `--refresh-ad-hoc-provisioning-profile` is never needed. `--local` is refused: the point is that the Mac is GitHub\'s. See [Building](/guide/building).',
   'build:list':
     'Reads workflow runs from the GitHub Actions API and maps each onto EAS\'s `BuildFragment` shape, so `--json` output can be piped into anything that understood EAS. Build ids are a SHA-256 of `repo#runId`, formatted as a UUID.',
   'build:view': 'Accepts a full build id, a unique id prefix, or a raw GitHub run id.',
@@ -40,9 +40,14 @@ const NOTES = {
     'Reports which signing secrets the repository holds. It does not create or upload them yet; see [Credentials](/guide/credentials) for the setup.',
   config: 'Prints the build and submit profile after `extends`, platform blocks and schema defaults are applied: what the runner actually receives.',
   'project:info': 'What the CLI sees: app identifiers, GitHub repository, branch, managed vs bare, lockfile, and whether `eas.json` exists.',
-  'device:list': 'Lists devices registered on your Apple Developer account through `asc`, with name, model and UDID.',
+  'device:list':
+    'Lists the [device registry](/guide/internal-distribution#registering-devices) on your install service: name, model, UDID, and whether Apple has it yet (`pending` / `registered`). `--apple-team-id` is accepted and ignored. Without an install service, lists the devices on your Apple Developer account through `asc`.',
   'device:create':
-    'Prints the `asc devices create` command to run. After registering a device, regenerate the ad-hoc profile and rebuild. See [Internal distribution](/guide/internal-distribution#adding-a-device).',
+    'Adds devices to the registry. Choose a link/QR to open on the device (Apple\'s Profile Service enrollment, like EAS), a device connected over USB, this Mac, a typed UDID, or an import from your Apple Developer account. The next internal build registers them with Apple and regenerates the ad-hoc profile. See [Registering devices](/guide/internal-distribution#registering-devices).',
+  'device:view': 'Shows one device from the registry.',
+  'device:rename': 'Renames a device in the registry. The name on Apple\'s side is left as it is. `--apple-team-id` is accepted and ignored.',
+  'device:delete':
+    'Removes a device from the registry, so the next ad-hoc profile leaves it out. Apple keeps the device, which counts toward the yearly limit until your membership renews. `--apple-team-id` is accepted and ignored.',
   'account:view': 'Shows the GitHub user the stored token belongs to, and its scopes.',
   'account:login':
     'Stores a GitHub personal access token (scopes `repo` and `workflow`) at `~/.eas-gh/auth.json`, mode 0600. Reads `EAS_GITHUB_TOKEN` when set, otherwise prompts. There is no Expo account, SSO or browser flow.',

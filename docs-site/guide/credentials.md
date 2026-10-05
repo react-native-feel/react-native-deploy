@@ -12,7 +12,8 @@ rnd credentials
 | `EAS_IOS_DIST_P12` | base64 `.p12`: distribution certificate **and** its private key | all signed iOS builds |
 | `EAS_IOS_P12_PASSWORD` | password for that `.p12` | all signed iOS builds |
 | `EAS_IOS_PROFILE` | base64 App Store provisioning profile | `distribution: "store"` |
-| `EAS_IOS_PROFILE_INTERNAL` | base64 ad-hoc provisioning profile listing test devices | `distribution: "internal"` |
+| `EAS_IOS_PROFILE_INTERNAL` | base64 ad-hoc provisioning profile listing test devices | `distribution: "internal"`, when there is no API key below |
+| `EAS_ASC_KEY_ID` / `EAS_ASC_ISSUER_ID` / `EAS_ASC_API_KEY` | App Store Connect API key: id, issuer id, and the `.p8` file's contents | `distribution: "internal"`: registers devices and [generates the ad-hoc profile](/guide/internal-distribution#_3-let-the-build-generate-the-ad-hoc-profile-ios) on each build |
 | `EAS_ANDROID_KEYSTORE` | base64 PKCS12 keystore | Android release builds |
 | `EAS_ANDROID_STORE_PASSWORD` / `EAS_ANDROID_KEY_ALIAS` / `EAS_ANDROID_KEY_PASSWORD` | keystore details | Android release builds |
 | `EAS_INSTALL_TOKEN` | upload token for the [install service](/guide/internal-distribution) | internal builds |
@@ -74,8 +75,9 @@ asc profiles create --bundle <bundle-id-resource-id> --certificate <certificate-
   | python3 -c 'import json,sys,base64; d=json.load(sys.stdin)["data"]; open("appstore.mobileprovision","wb").write(base64.b64decode(d["attributes"]["profileContent"]))'
 ```
 
-For internal builds you also need an ad-hoc profile: see
-[Internal distribution](/guide/internal-distribution#_3-create-an-ad-hoc-profile-for-your-devices-ios).
+For internal builds, add the App Store Connect API key secrets and the build generates the
+ad-hoc profile from your registered devices: see
+[Internal distribution](/guide/internal-distribution#_3-let-the-build-generate-the-ad-hoc-profile-ios).
 
 ### 5. Store the secrets
 

@@ -161,6 +161,10 @@ export function buildDispatchInputs({ platform, profile, ref, profileName, lockf
       scheme: profile.scheme ?? '',
       build_configuration: profile.buildConfiguration ?? (profile.developmentClient ? 'Debug' : 'Release'),
       export_method: resolveIosExportMethod(profile) ?? '',
+      // The ad-hoc profile is generated for this bundle id on the runner. A
+      // dynamic app.config.js can leave it empty here; the runner then reads it
+      // from the prebuilt Xcode project.
+      ios_bundle_identifier: appConfig.ios?.bundleIdentifier ?? '',
       simulator: String(Boolean(profile.simulator)),
       without_credentials: String(Boolean(profile.withoutCredentials || profile.simulator)),
       cocoapods_version: profile.cocoapods ?? '',

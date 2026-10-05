@@ -25,6 +25,7 @@ differently, it does so on purpose and says so at the command line.
 | Android `eas submit` | Not wired up yet | Needs a Google Play service account, not `asc`. Upload the `.aab` to Play Console directly |
 | `eas update`, `branch`, `channel`, `env`, `secret`, `webhook`, `workflow:run`, `deploy`, `metadata` | Recognised and refused with the alternative | They are Expo-hosted services. See [the list](/reference/commands#not-supported) |
 | Internal distribution links on expo.dev | Install pages on your own Cloudflare Worker | See [Internal distribution](/guide/internal-distribution) |
+| Devices stored on Expo's servers; `expo.dev/register-device` links | A D1 device registry on that Worker; `/register-device` links | Same flow: QR, profile, UDID. The ad-hoc profile is regenerated on the runner with your App Store Connect API key |
 
 ## Not there yet
 
@@ -38,4 +39,3 @@ These are known gaps rather than design decisions:
 - **Credential setup** has no wizard; the manual steps are in [Credentials](/guide/credentials).
 - **App extensions** (widgets, notification services) are not signed: one provisioning profile
   per build, applied to the app target.
-- **`rnd device:create`** prints the `asc` command to run rather than registering the device.

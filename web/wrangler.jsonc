@@ -15,6 +15,17 @@
       "binding": "BUILDS",
       "bucket_name": "rn-eas-builds"
     }
+  ],
+  // The device registry behind /register-device and /api/devices. Create it once:
+  //   npx wrangler d1 create rn-deploy-devices      (then paste the id below)
+  //   npx wrangler d1 migrations apply rn-deploy-devices --remote
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "rn-deploy-devices",
+      "database_id": "af72a57e-b402-4129-a637-66fc4502bd30",
+      "migrations_dir": "migrations"
+    }
   ]
   // UPLOAD_TOKEN is a secret:
   //   npx wrangler pages secret put UPLOAD_TOKEN --project-name react-native-deploy

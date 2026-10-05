@@ -3,7 +3,6 @@ import chalk from 'chalk';
 import { EasJsonAccessor } from '../easjson/accessor.js';
 import { EasJsonUtils } from '../easjson/utils.js';
 import { GitHubClient, clearToken, readAuth, saveToken } from '../github/api.js';
-import { runAsc } from '../submit/asc.js';
 import { Log, die, link, printJson, setJsonMode } from '../utils/logger.js';
 import { loadProjectContext } from '../utils/project.js';
 
@@ -117,7 +116,10 @@ export async function credentials({ options }) {
       ['EAS_IOS_DIST_P12', 'distribution certificate + private key'],
       ['EAS_IOS_P12_PASSWORD', 'password for that .p12'],
       ['EAS_IOS_PROFILE', 'App Store provisioning profile (store builds)'],
-      ['EAS_IOS_PROFILE_INTERNAL', 'ad-hoc provisioning profile with test devices (internal builds)'],
+      ['EAS_IOS_PROFILE_INTERNAL', 'ad-hoc profile for internal builds (not needed with the API key below)'],
+      ['EAS_ASC_KEY_ID', 'App Store Connect API key id: generates the ad-hoc profile from your devices'],
+      ['EAS_ASC_ISSUER_ID', 'App Store Connect API issuer id'],
+      ['EAS_ASC_API_KEY', 'the API key\'s .p8 file contents'],
     ],
     android: [
       ['EAS_ANDROID_KEYSTORE', 'release keystore'],
@@ -147,50 +149,6 @@ export async function credentials({ options }) {
   Log.log('');
   Log.log(chalk.dim('  Secrets are sealed against the repo public key; GitHub never sees a plaintext value.'));
   Log.log(chalk.dim('  iOS signing assets are issued through "asc signing" — see "asc signing --help".'));
-  Log.log('');
-}
-
-/**
- * Apple devices for ad-hoc distribution. asc owns the device list, so these just
- * front its commands rather than keeping a parallel registry.
- */
-export async function deviceList({ options }) {
-  setJsonMode(options.json);
-  const args = ['devices', 'list', '--output', 'json'];
-  if (options.limit) args.push('--limit', String(options.limit));
-  const { stdout } = await runAsc(args);
-  if (options.json) {
-    process.stdout.write(stdout);
-    return;
-  }
-  let devices;
-  try {
-    const parsed = JSON.parse(stdout);
-    devices = Array.isArray(parsed) ? parsed : (parsed.data ?? []);
-  } catch {
-    Log.log(stdout);
-    return;
-  }
-  Log.log('');
-  for (const device of devices) {
-    const attrs = device.attributes ?? device;
-    // The model matters: two devices can share a name, and a build provisioned
-    // for the wrong one fails on the phone with only "integrity could not be verified".
-    Log.log(
-      `  ${chalk.cyan((attrs.name ?? '—').padEnd(28))} ${(attrs.model ?? '').padEnd(20)} ${chalk.dim(attrs.udid ?? '')} ${chalk.dim(attrs.status ?? '')}`
-    );
-  }
-  Log.log('');
-}
-
-export async function deviceCreate() {
-  Log.log('');
-  Log.log('Register a device for ad-hoc builds with asc:');
-  Log.log('');
-  Log.log(`  ${chalk.cyan('asc devices create --name "My iPhone" --udid <UDID> --platform IOS')}`);
-  Log.log('');
-  Log.log('Then regenerate the provisioning profile so it includes the new device,');
-  Log.log('and rebuild — an existing .ipa cannot pick up a device added after it was signed.');
   Log.log('');
 }
 

@@ -18,7 +18,7 @@ Global options: `--help` on any command, `--version` on `eas`.
 
 > start a build
 
-**In rnd:** Resolves the profile from `eas.json`, checks it can be built, and dispatches `.github/workflows/eas-build.yml` on GitHub Actions. iOS runs on `macos-26`, Android on `ubuntu-latest`. Internal builds are published to the [install service](/guide/internal-distribution) when it is configured. `--local` is refused: the point is that the Mac is GitHub's. See [Building](/guide/building).
+**In rnd:** Resolves the profile from `eas.json`, checks it can be built, and dispatches `.github/workflows/eas-build.yml` on GitHub Actions. iOS runs on `macos-26`, Android on `ubuntu-latest`. Internal builds are published to the [install service](/guide/internal-distribution) when it is configured. With an App Store Connect API key, internal iOS builds regenerate the ad-hoc profile whenever the registered devices change, so `--refresh-ad-hoc-provisioning-profile` is never needed. `--local` is refused: the point is that the Mac is GitHub's. See [Building](/guide/building).
 
 ```sh
 rnd build [flags]
@@ -317,7 +317,7 @@ rnd project:info
 
 > list all registered devices for your account
 
-**In rnd:** Lists devices registered on your Apple Developer account through `asc`, with name, model and UDID.
+**In rnd:** Lists the [device registry](/guide/internal-distribution#registering-devices) on your install service: name, model, UDID, and whether Apple has it yet (`pending` / `registered`). `--apple-team-id` is accepted and ignored. Without an install service, lists the devices on your Apple Developer account through `asc`.
 
 ```sh
 rnd device:list [flags]
@@ -335,11 +335,56 @@ rnd device:list [flags]
 
 > register new Apple Devices to use for internal distribution
 
-**In rnd:** Prints the `asc devices create` command to run. After registering a device, regenerate the ad-hoc profile and rebuild. See [Internal distribution](/guide/internal-distribution#adding-a-device).
+**In rnd:** Adds devices to the registry. Choose a link/QR to open on the device (Apple's Profile Service enrollment, like EAS), a device connected over USB, this Mac, a typed UDID, or an import from your Apple Developer account. The next internal build registers them with Apple and regenerates the ad-hoc profile. See [Registering devices](/guide/internal-distribution#registering-devices).
 
 ```sh
 rnd device:create
 ```
+
+### `rnd device:view` {#eas-device-view}
+
+> view a device for your project
+
+**In rnd:** Shows one device from the registry.
+
+```sh
+rnd device:view [UDID]
+```
+
+### `rnd device:rename` {#eas-device-rename}
+
+> rename a registered device
+
+**In rnd:** Renames a device in the registry. The name on Apple's side is left as it is. `--apple-team-id` is accepted and ignored.
+
+```sh
+rnd device:rename [flags]
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--apple-team-id <value>` |  | The Apple team ID on which to find the device. |
+| `--udid <value>` |  | The Apple device ID to rename. |
+| `--name <value>` |  | The new name for the device. |
+| `--json` |  | Enable JSON output. |
+| `--non-interactive` |  | Run the command in non-interactive mode. |
+
+### `rnd device:delete` {#eas-device-delete}
+
+> remove a registered device from your account
+
+**In rnd:** Removes a device from the registry, so the next ad-hoc profile leaves it out. Apple keeps the device, which counts toward the yearly limit until your membership renews. `--apple-team-id` is accepted and ignored.
+
+```sh
+rnd device:delete [flags]
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--apple-team-id <value>` |  | The Apple team ID on which to find the device. |
+| `--udid <value>` |  | The Apple device ID to disable. |
+| `--json` |  | Enable JSON output. |
+| `--non-interactive` |  | Run the command in non-interactive mode. |
 
 
 ## Account

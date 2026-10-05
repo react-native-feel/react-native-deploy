@@ -119,10 +119,29 @@ export function devicePlatform(userAgent = '') {
 }
 
 /**
+ * Which devices an ad-hoc build installs on, and whether the phone holding the
+ * page is one of them. Without this, iOS reports a device missing from the
+ * profile only as "integrity could not be verified", after the download.
+ */
+function provisioningSection(provisionedDevices, viewerUdid) {
+  if (!provisionedDevices) return { warning: '', list: '' };
+  const label = (d) => [d.name, d.product].filter(Boolean).join(' · ') || d.udid;
+  const items = provisionedDevices
+    .map((d) => `<li${d.udid === viewerUdid ? ' class="you"' : ''}>${html(label(d))}${d.udid === viewerUdid ? ' <span>(this device)</span>' : ''}</li>`)
+    .join('');
+  const list = `<details class="devices"><summary>Installs on ${provisionedDevices.length} device${provisionedDevices.length === 1 ? '' : 's'}</summary><ul>${items}</ul></details>`;
+  const missing = viewerUdid && !provisionedDevices.some((d) => d.udid === viewerUdid);
+  const warning = missing
+    ? `<p class="warning">This device is not in this build's provisioning profile, so iOS will refuse to install it. It was registered after the build was signed: start a new build.</p>`
+    : '';
+  return { warning, list };
+}
+
+/**
  * The page a QR code lands on. One action per platform, and the reason when the
  * build cannot be installed on the device holding the phone.
  */
-export function installPage({ meta, pageUrl, manifestUrl, fileUrl, device }) {
+export function installPage({ meta, pageUrl, manifestUrl, fileUrl, device, provisionedDevices = null, viewerUdid = null }) {
   const isIos = meta.platform === 'ios';
   const platformLabel = isIos ? 'iOS' : 'Android';
   const initial = html((meta.name ?? '?').trim().charAt(0).toUpperCase() || '?');
@@ -135,9 +154,11 @@ export function installPage({ meta, pageUrl, manifestUrl, fileUrl, device }) {
     ['Built', meta.createdAt ? new Date(meta.createdAt).toUTCString().replace(' GMT', ' UTC') : null],
   ].filter(([, value]) => value);
 
+  const provisioning = isIos ? provisioningSection(provisionedDevices, viewerUdid) : { warning: '', list: '' };
+
   let action;
   if (isIos && device === 'ios') {
-    action = `
+    action = `${provisioning.warning}
       <a class="button" href="${html(itmsServicesUrl(manifestUrl))}">Install</a>
       <ol class="steps">
         <li>Tap <strong>Install</strong>, then <strong>Install</strong> again in the prompt.</li>
@@ -199,6 +220,13 @@ export function installPage({ meta, pageUrl, manifestUrl, fileUrl, device }) {
   .qr svg { display:block; width:100%; height:auto; }
   .link { font:13px ui-monospace, SFMono-Regular, Menlo, monospace; background:var(--bg);
           border:1px solid var(--line); border-radius:8px; padding:10px; overflow-wrap:anywhere; margin:8px 0 0; }
+  .warning { font-size:14px; margin:0 0 16px; padding:12px; border-radius:10px;
+             background:#fef3c7; color:#78350f; border:1px solid #fcd34d; }
+  @media (prefers-color-scheme: dark) { .warning { background:#422006; color:#fde68a; border-color:#854d0e; } }
+  .devices { font-size:14px; margin:16px 0 0; color:var(--muted); }
+  .devices summary { cursor:pointer; }
+  .devices ul { margin:8px 0 0; padding-left:20px; }
+  .devices .you { color:var(--text); font-weight:600; } .devices .you span { font-weight:400; color:var(--muted); }
 </style>
 </head>
 <body>
@@ -212,6 +240,7 @@ export function installPage({ meta, pageUrl, manifestUrl, fileUrl, device }) {
   </header>
   <dl>${facts.map(([k, v]) => `<dt>${html(k)}</dt><dd>${html(v)}</dd>`).join('')}</dl>
   ${action}
+  ${provisioning.list}
 </main>
 </body>
 </html>

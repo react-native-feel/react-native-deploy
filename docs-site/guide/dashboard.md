@@ -11,6 +11,8 @@ The `web/` package is deployed as one Cloudflare Pages project — for this repo
 | `/install/<dispatch-id>/manifest.plist` | The iOS over-the-air manifest |
 | `/install/<dispatch-id>/app.ipa`, `app.apk` | The binary, streamed from R2 |
 | `/api/uploads/…` | Upload API for the build workflow, protected by a bearer token |
+| `/register-device/<token>` | Public device registration: the page a `rnd device:create` QR opens |
+| `/api/devices/…` | The device registry (D1), for the CLI and the workflow, protected by the same token |
 
 ## Using the dashboard
 
@@ -30,6 +32,8 @@ becomes `<name>.pages.dev`. The commands below use `react-native-deploy`.
 cd web
 npm install
 npx wrangler r2 bucket create rn-eas-builds                     # once
+npx wrangler d1 create rn-deploy-devices                        # once: paste its id into wrangler.jsonc
+npx wrangler d1 migrations apply rn-deploy-devices --remote     # once, and after a migration is added
 npx wrangler pages project create react-native-deploy \
   --production-branch master --force                            # once (see below)
 
@@ -60,9 +64,11 @@ rm upload_token
   they can be deleted.
 :::
 
-The configuration is `web/wrangler.jsonc`: the build output directory and an R2 binding named
-`BUILDS`. `npm run deploy` writes `.pages-dist/_worker.js`, which re-exports `web/worker/index.js`:
-Pages "advanced mode", so every request reaches the Worker code. It routes `/install` and `/api`,
+The configuration is `web/wrangler.jsonc`: the build output directory, an R2 binding named
+`BUILDS` for the builds, and a D1 binding named `DB` for the [device registry](/guide/internal-distribution#registering-devices).
+The registry's schema is in `web/migrations/`. Without the D1 binding everything else works, and the
+device routes answer `503`. `npm run deploy` writes `.pages-dist/_worker.js`, which re-exports `web/worker/index.js`:
+Pages "advanced mode", so every request reaches the Worker code. It routes `/install`, `/register-device` and `/api`,
 serves the dashboard and docs from the static assets, and gives the dashboard's client-side routes
 a fallback.
 

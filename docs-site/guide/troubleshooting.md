@@ -18,10 +18,25 @@ push.
 
 ## iOS: "integrity could not be verified" when installing
 
-The device isn't in the build's provisioning profile. iOS gives no other hint. Check that the
-ad-hoc profile in `EAS_IOS_PROFILE_INTERNAL` contains **this** device's UDID (`rnd device:list`
-shows the model next to each name), then rebuild. A profile change never reaches a build that
-was already signed. See [Internal distribution](/guide/internal-distribution#adding-a-device).
+The device isn't in the build's provisioning profile. iOS gives no other hint. The install page
+lists the devices the build was signed for under **Installs on N devices**, and warns a phone
+registered through a QR link when it isn't one of them.
+
+Register the device with `rnd device:create` (`rnd device:list` shows the model next to each
+name, so you can tell two "iPhone"s apart), then rebuild. A profile change never reaches a build
+that was already signed. If the build log warns that the device *"is not in the profile yet"*,
+Apple is still processing it: build again later. See
+[Internal distribution](/guide/internal-distribution#adding-a-device).
+
+## iOS: a device registered with `rnd device:create` is not in the build
+
+- **The build has no App Store Connect API key.** Without `EAS_ASC_KEY_ID`, `EAS_ASC_ISSUER_ID`
+  and `EAS_ASC_API_KEY`, the **Provision ad-hoc profile** step says so and the build signs with
+  `EAS_IOS_PROFILE_INTERNAL` as is. Registered devices are ignored.
+- **Apple refused the device.** The step logs a warning naming it: usually an invalid UDID, or
+  the 100-devices-per-year limit.
+- **The key's role is too low.** Registering devices and creating profiles needs **Admin** or
+  **App Manager**.
 
 ## iOS: "… requires a provisioning profile"
 

@@ -9,7 +9,7 @@ dashboard and install service they share.
 | In one line | The same `eas` commands, running on **GitHub Actions** | An EAS-compatible pipeline on **a Mac you point it at** |
 | Where builds run | GitHub-hosted `macos-26` / `ubuntu-latest` runners in your repo | AWS EC2 Mac (provisioned per build), MacinCloud or any SSH-reachable Mac, a cua cloud sandbox, or a GitHub runner (simulator builds) |
 | Command surface | Drop-in for `eas-cli`'s build/submit commands and flags (contract-tested) | `rn-deploy setup` / `build` / `submit` / `infra` / `install` |
-| Signing | Repo secrets; ad-hoc profile for internal builds | `asc` keychain + signing fetch/sync on the host |
+| Signing | Repo secrets; ad-hoc profile regenerated per build from a device registry (`rnd device:create` QR) | `asc` keychain + signing fetch/sync on the host |
 | Android | Yes (`.apk` / `.aab`) | No |
 | Pay for | GitHub Actions minutes (free on public repos) | the Mac: EC2 host time, a MacinCloud rental, … |
 | Pick it when | you want `eas build` without Expo's servers | you already rent a Mac, or need a full Mac rather than a runner |

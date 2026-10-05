@@ -252,6 +252,33 @@ export const COMMANDS = [
     flags: [],
   },
   {
+    id: 'device:view',
+    description: 'view a device for your project',
+    args: ['UDID'],
+    flags: [],
+  },
+  {
+    id: 'device:rename',
+    description: 'rename a registered device',
+    flags: [
+      { name: 'apple-team-id', type: 'option', description: 'The Apple team ID on which to find the device' },
+      { name: 'udid', type: 'option', description: 'The Apple device ID to rename' },
+      { name: 'name', type: 'option', description: 'The new name for the device' },
+      json,
+      nonInteractive,
+    ],
+  },
+  {
+    id: 'device:delete',
+    description: 'remove a registered device from your account',
+    flags: [
+      { name: 'apple-team-id', type: 'option', description: 'The Apple team ID on which to find the device' },
+      { name: 'udid', type: 'option', description: 'The Apple device ID to disable' },
+      json,
+      nonInteractive,
+    ],
+  },
+  {
     id: 'account:view',
     aliases: ['whoami'],
     description: 'show the username you are logged in as',
