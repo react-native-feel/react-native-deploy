@@ -14,5 +14,5 @@
     "commander": "^14.0.3",
     "libsodium-wrappers": "^0.7.15"
   },
-  "license": "ISC"
+  "license": "MIT"
 }

@@ -77,7 +77,7 @@ function notConfigured() {
   Log.log('');
   Log.warn('No device registry: this project has no install service (EAS_INSTALL_URL).');
   Log.log('  Deploy one and set the variable, as in the internal distribution guide:');
-  Log.log(`  ${link('https://react-native-deploy.pages.dev/deploy/docs/guide/internal-distribution')}`);
+  Log.log(`  ${link('https://reactnativefeel.com/deploy/docs/guide/internal-distribution')}`);
   Log.log('');
 }
 

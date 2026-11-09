@@ -14,7 +14,7 @@ rnd submit --profile production --path build/MyApp.ipa
 
 Apart from the command name, that is what you already run with `eas`. That is the point.
 
-**Docs:** https://react-native-deploy.pages.dev/deploy/docs/ (source in [`../docs-site`](../docs-site)).
+**Docs:** https://reactnativefeel.com/deploy/docs/ (source in [`../docs-site`](../docs-site)).
 
 ---
 
@@ -76,7 +76,7 @@ touching the App Store.
 
 `rnd` sends anonymous usage stats: which commands and flags run, never their
 values, paths or anything from your project. Opt out with `DO_NOT_TRACK=1`.
-[What is sent](https://react-native-deploy.pages.dev/deploy/docs/guide/telemetry).
+[What is sent](https://reactnativefeel.com/deploy/docs/guide/telemetry).
 
 ## Getting started
 
@@ -233,4 +233,4 @@ eas/
 
 ## License
 
-ISC
+[MIT](../LICENSE)

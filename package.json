@@ -19,13 +19,13 @@
   ],
   "author": "Rodrigo Figueroa (https://github.com/bidah)",
   "license": "MIT",
-  "homepage": "https://github.com/bidah/react-native-deploy#readme",
+  "homepage": "https://reactnativefeel.com/deploy/docs/",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bidah/react-native-deploy.git"
+    "url": "git+https://github.com/react-native-feel/react-native-deploy.git"
   },
   "bugs": {
-    "url": "https://github.com/bidah/react-native-deploy/issues"
+    "url": "https://github.com/react-native-feel/react-native-deploy/issues"
   },
   "bin": {
     "rn-deploy": "./bin/rn-deploy.js"

@@ -15,10 +15,13 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bidah/react-native-deploy.git",
+    "url": "git+https://github.com/react-native-feel/react-native-deploy.git",
     "directory": "eas"
   },
-  "homepage": "https://react-native-deploy.pages.dev/deploy/docs/",
+  "homepage": "https://reactnativefeel.com/deploy/docs/",
+  "bugs": {
+    "url": "https://github.com/react-native-feel/react-native-deploy/issues"
+  },
   "keywords": [
     "react-native",
     "expo",
@@ -47,7 +50,7 @@
     "qrcode-terminal": "^0.12.0",
     "semver": "^7.6.3"
   },
-  "license": "ISC",
+  "license": "MIT",
   "devDependencies": {
     "@expo/eas-json": "^24.5.0",
     "eas-cli": "^24.6.0",

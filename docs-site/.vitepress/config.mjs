@@ -1,7 +1,8 @@
 import { defineConfig } from 'vitepress';
 
-// Served by the same Worker as the dashboard, under /deploy/docs/ — so every
-// asset and link is prefixed, exactly like the dashboard's /deploy/dashboard/.
+// Built under /deploy/docs/ and served two ways from the same files: by the
+// Cloudflare Pages app next to the dashboard (react-native-deploy.pages.dev),
+// and proxied from reactnativefeel.com/deploy/docs — the canonical address.
 export default defineConfig({
   base: '/deploy/docs/',
   title: 'React Native Deploy',
@@ -15,8 +16,9 @@ export default defineConfig({
       { text: 'Guide', link: '/guide/getting-started', activeMatch: '/guide/' },
       { text: 'Commands', link: '/reference/commands', activeMatch: '/reference/commands' },
       { text: 'Workflow', link: '/reference/workflow', activeMatch: '/reference/workflow' },
-      // The dashboard is a separate app on the same origin, not a docs page.
-      { text: 'Dashboard', link: '/../dashboard/', target: '_self' },
+      // The dashboard is a separate app on the Pages origin, not a docs page.
+      // Absolute, because reactnativefeel.com proxies the docs but not the dashboard.
+      { text: 'Dashboard', link: 'https://react-native-deploy.pages.dev/deploy/dashboard/' },
     ],
     sidebar: [
       {
@@ -52,6 +54,10 @@ export default defineConfig({
         ],
       },
       {
+        text: 'Open source',
+        items: [{ text: 'Contributing', link: '/guide/contributing' }],
+      },
+      {
         text: 'Reference',
         items: [
           { text: 'Commands', link: '/reference/commands' },
@@ -59,10 +65,18 @@ export default defineConfig({
         ],
       },
     ],
+    socialLinks: [{ icon: 'github', link: 'https://github.com/react-native-feel/react-native-deploy' }],
+    editLink: {
+      pattern: 'https://github.com/react-native-feel/react-native-deploy/edit/master/docs-site/:path',
+      text: 'Edit this page on GitHub',
+    },
     search: { provider: 'local' },
     outline: { level: [2, 3] },
     footer: {
-      message: 'Builds run on your GitHub Actions minutes; signing assets stay in your repo secrets.',
+      message:
+        'Released under the MIT License. Builds run on your GitHub Actions minutes; signing assets stay in your repo secrets.',
+      copyright:
+        '<a href="https://github.com/react-native-feel/react-native-deploy">react-native-feel/react-native-deploy</a> · <a href="https://reactnativefeel.com/deploy">reactnativefeel.com/deploy</a>',
     },
   },
 });

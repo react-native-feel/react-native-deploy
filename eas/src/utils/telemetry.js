@@ -47,7 +47,7 @@ function anonymousId() {
     // stderr, so `--json` output stays clean.
     process.stderr.write(
       'rnd collects anonymous usage stats (commands and flags, never values or paths).\n' +
-        'Opt out with DO_NOT_TRACK=1. Details: https://react-native-deploy.pages.dev/deploy/docs/guide/telemetry\n'
+        'Opt out with DO_NOT_TRACK=1. Details: https://reactnativefeel.com/deploy/docs/guide/telemetry\n'
     );
     return id;
   }

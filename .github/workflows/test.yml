@@ -1,0 +1,44 @@
+name: test
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.package }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [eas, web, gh-build, .]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # web/ imports eas/src through the @eas alias, so eas/ needs its deps too.
+      - if: matrix.package == 'web'
+        run: npm ci
+        working-directory: eas
+      - run: npm ci
+        working-directory: ${{ matrix.package }}
+      - run: npm test
+        working-directory: ${{ matrix.package }}
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # The command reference is generated from eas/src/cli/spec.js.
+      - run: npm ci
+        working-directory: eas
+      - run: npm ci && npm run build
+        working-directory: docs-site

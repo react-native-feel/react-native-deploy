@@ -1,8 +1,25 @@
-# react-native-deploy
+# React Native Deploy
+
+[![npm](https://img.shields.io/npm/v/@react-native-feel/deploy?label=%40react-native-feel%2Fdeploy)](https://www.npmjs.com/package/@react-native-feel/deploy)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+[![Docs](https://img.shields.io/badge/docs-reactnativefeel.com%2Fdeploy%2Fdocs-4f46e5)](https://reactnativefeel.com/deploy/docs/)
 
 Ship React Native and Expo apps — builds, TestFlight, and installs on test devices — without
-owning a Mac. This repository holds two build CLIs that read the same `eas.json`, plus the
-dashboard and install service they share.
+owning a Mac or paying per build. Free and open source (MIT).
+
+```sh
+npm install -g @react-native-feel/deploy
+rnd build:configure          # writes eas.json + .github/workflows/eas-build.yml
+rnd build --platform ios --profile production
+rnd submit --profile production --path build/MyApp.ipa
+```
+
+**Documentation:** [reactnativefeel.com/deploy/docs](https://reactnativefeel.com/deploy/docs/) ·
+**Getting started:** [guide](https://reactnativefeel.com/deploy/docs/guide/getting-started) ·
+**Commands:** [reference](https://reactnativefeel.com/deploy/docs/reference/commands)
+
+This repository holds two build CLIs that read the same `eas.json`, plus the dashboard and
+install service they share.
 
 | | **`rnd`** ([`eas/`](eas/README.md)) | **`rn-deploy`** (this directory, [below](#rn-deploy)) |
 |---|---|---|
@@ -22,12 +39,12 @@ Both read `eas.json` and `app.json`, sign with your App Store Connect API key th
 | | Where | What |
 |---|---|---|
 | **Dashboard & install service** | [`web/`](web/README.md) — live at [react-native-deploy.pages.dev](https://react-native-deploy.pages.dev) | Vite dashboard (builds, build detail, Install QR) and the Cloudflare Pages app that serves it, the public `/install/<id>` pages (itms-services on iOS, APK on Android, QR on desktop) and the R2 upload API |
-| **rn-eas docs** | [`docs-site/`](docs-site/) — [react-native-deploy.pages.dev/deploy/docs](https://react-native-deploy.pages.dev/deploy/docs/) | VitePress site; the command reference is generated from the CLI's spec |
+| **`rnd` docs** | [`docs-site/`](docs-site/) — [reactnativefeel.com/deploy/docs](https://reactnativefeel.com/deploy/docs/) | VitePress site; the command reference is generated from the CLI's spec |
 | **rn-deploy docs** | [`rnd-docs/`](rnd-docs/README.md) | Fumadocs site |
-| **Release test** | [`docs/release-testing/`](docs/release-testing/) | End-to-end test of rn-eas as a new user, bugs found and fixed |
+| **Release test** | [`docs/release-testing/`](docs/release-testing/) | End-to-end test of `rnd` as a new user, bugs found and fixed |
 
 ```bash
-cd eas && npm install && npm test          # rn-eas CLI
+cd eas && npm install && npm test          # rnd CLI
 cd web && npm install && npm test          # dashboard + install service
 npm test                                   # rn-deploy (repo root)
 ```
@@ -38,7 +55,7 @@ Smaller, independent tools that predate the two CLIs and solve adjacent problems
 
 | | Where | What |
 |---|---|---|
-| **`rn-build`** | [`gh-build/`](gh-build/README.md) | The direct ancestor of `rn-eas`: GitHub Actions builds with its own `rn-build.config.json` instead of `eas.json` |
+| **`rn-build`** | [`gh-build/`](gh-build/README.md) | The direct ancestor of `rnd`: GitHub Actions builds with its own `rn-build.config.json` instead of `eas.json` |
 | **`rn-preview`** | [`sim-preview/`](sim-preview/README.md) | A booted iOS Simulator on a rented Mac (MacinCloud), streamed to your browser with `baguette` |
 
 ---
@@ -186,6 +203,14 @@ rn-deploy install --id 8f3e…    # by build id (prefix ok)
 
 For a `simulator` build, `install` downloads the `.app` from the bucket onto the configured host and runs `xcrun simctl install booted` + `launch` (a simulator must be booted — e.g. via the `baguette` streamer). For an `.ipa` build it prints the device install page + QR instead.
 
+---
+
+## Contributing
+
+Issues and pull requests are welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md) for the layout,
+how to run each package's tests, and what a good PR looks like. Report security problems
+privately, as described in [SECURITY.md](./SECURITY.md).
+
 ## License
 
-[MIT](./LICENSE) © Rodrigo Figueroa
+[MIT](./LICENSE) © Rodrigo Figueroa. Part of [React Native Feel](https://reactnativefeel.com).

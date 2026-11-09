@@ -21,7 +21,7 @@ npm run deploy   # build dashboard + docs, then `wrangler pages deploy`
 ```
 
 First-time Cloudflare setup (R2 bucket, D1 database, Pages project, `UPLOAD_TOKEN`) is in the docs:
-[Dashboard & install service](https://react-native-deploy.pages.dev/deploy/docs/guide/dashboard#deploy).
+[Dashboard & install service](https://reactnativefeel.com/deploy/docs/guide/dashboard#deploy).
 
 ## What it shows
 

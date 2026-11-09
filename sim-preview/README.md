@@ -75,7 +75,7 @@ What it does:
 If you'd rather run the SSH command by hand, the URL printed by `./bin/baguette.sh` is what to use:
 
 ```bash
-ssh -L 8421:localhost:8421 user945049@TX079.macincloud.com
+ssh -L 8421:localhost:8421 user@TX0XX.macincloud.com
 # in your local browser:  http://localhost:8421/simulators
 ```
 
