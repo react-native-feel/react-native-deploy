@@ -68,7 +68,8 @@ The command reference in the docs is generated from `eas/src/cli/spec.js`
 - Keep a PR to one change. A bug fix with its regression test is the ideal size.
 - Run the tests for every package you touched. CI runs them all on each PR.
 - If behaviour changes, update the docs page in `docs-site/guide/` in the same PR. Every docs
-  page has an "Edit this page on GitHub" link for small fixes.
+  page has an "Edit this page on GitHub" link for small fixes. Docs (and the dashboard) deploy
+  automatically when a change lands on `master` (`.github/workflows/deploy-pages.yml`).
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/)
   (`feat(cli): …`, `fix(web): …`, `docs: …`), which is what the release notes are built from.
 

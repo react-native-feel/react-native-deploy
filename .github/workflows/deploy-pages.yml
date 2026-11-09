@@ -1,0 +1,69 @@
+# Deploys the docs, the dashboard and the install worker — one Cloudflare Pages
+# project, react-native-deploy.pages.dev — whenever something they are built
+# from changes on master. reactnativefeel.com/deploy/docs proxies the docs from
+# there, so merging a docs change is all it takes to publish it.
+#
+# Needs the CLOUDFLARE_API_TOKEN secret (a token with Cloudflare Pages: Edit)
+# and the CLOUDFLARE_ACCOUNT_ID variable. Without the token it skips with a warning.
+name: deploy pages
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - docs-site/**
+      - web/**
+      # The docs' command reference and the dashboard's build records are
+      # generated from / imported out of eas/src.
+      - eas/src/**
+      - .github/workflows/deploy-pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-pages
+  cancel-in-progress: false
+
+jobs:
+  check:
+    # Forks don't have the secrets; don't fail their runs.
+    if: github.repository == 'react-native-feel/react-native-deploy'
+    runs-on: ubuntu-latest
+    outputs:
+      ok: ${{ steps.creds.outputs.ok }}
+    steps:
+      - id: creds
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::warning::CLOUDFLARE_API_TOKEN is not set; skipping the Pages deploy."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  deploy:
+    needs: check
+    if: needs.check.outputs.ok == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: eas
+      - run: npm ci
+        working-directory: docs-site
+      - run: npm ci
+        working-directory: web
+      - run: npm test
+        working-directory: web
+      - run: npm run deploy
+        working-directory: web
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
